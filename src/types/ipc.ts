@@ -6,13 +6,14 @@ export const CHANNELS = {
   COMPLETE_CAPTURE: 'COMPLETE_CAPTURE',
   CANCEL_CAPTURE: 'CANCEL_CAPTURE',
   COPY_TO_CLIPBOARD: 'COPY_TO_CLIPBOARD',
+  HIDE_WINDOW: 'HIDE_WINDOW',
   PLUGIN_LOAD: 'PLUGIN_LOAD',
   LOG: 'LOG',
   OCR_REQUEST: 'OCR_REQUEST',  // 新增 OCR 请求通道
 } as const
 
 // 通道名称类型
-export type ChannelName = typeof CHANNELS[keyof typeof CHANNELS]
+export type ChannelName = keyof typeof CHANNELS
 
 // 确保类型安全
 export function isValidChannel(channel: string): channel is ChannelName {

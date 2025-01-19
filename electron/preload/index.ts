@@ -33,6 +33,11 @@ const api: IElectronAPI = {
     return ipcRenderer.invoke(CHANNELS.COPY_TO_CLIPBOARD, bounds)
   },
 
+  // 窗口相关
+  hideWindow: () => {
+    return ipcRenderer.invoke(CHANNELS.HIDE_WINDOW)
+  },
+
   // 插件相关
   loadPlugin: (pluginId: string) => ipcRenderer.invoke(CHANNELS.PLUGIN_LOAD, pluginId),
   

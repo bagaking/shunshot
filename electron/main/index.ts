@@ -192,24 +192,40 @@ const createCaptureWindow = async () => {
 const createWindow = async () => {
   Logger.log('Creating main window...')
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 280,
+    height: 380,
     webPreferences: {
       preload: join(process.env.DIST_ELECTRON, 'preload/index.js'),
       nodeIntegration: true,
       contextIsolation: true,
     },
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    hasShadow: true,
+    type: 'panel',
   })
+
+  // 设置窗口位置 - 默认在右下角
+  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
+  mainWindow.setPosition(screenWidth - 300, screenHeight - 400)
 
   // 加载页面
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
-    mainWindow.webContents.openDevTools()
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(join(process.env.DIST, 'index.html'))
   }
 
-  console.log('Main window created')
+  // macOS 特定设置
+  if (process.platform === 'darwin') {
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  }
+
+  Logger.log('Main window created')
 }
 
 // 注册全局快捷键
@@ -421,5 +437,13 @@ ipcMain.handle(CHANNELS.OCR_REQUEST, async (event, bounds) => {
   } catch (error) {
     Logger.error('Failed to process OCR', error as Error, event.sender, mainWindow, captureWindow)
     return { error: 'OCR processing failed' }
+  }
+})
+
+// 处理窗口相关的 IPC 通信
+ipcMain.handle(CHANNELS.HIDE_WINDOW, async () => {
+  Logger.log('Hiding main window')
+  if (mainWindow) {
+    mainWindow.hide()
   }
 }) 

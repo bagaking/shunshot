@@ -10,6 +10,9 @@ export interface IElectronAPI {
   cancelCapture: () => void
   copyToClipboard: (bounds: CaptureBounds) => Promise<void>
   
+  // 窗口相关
+  hideWindow: () => Promise<void>
+  
   // 插件相关
   loadPlugin: (pluginId: string) => Promise<void>
 
