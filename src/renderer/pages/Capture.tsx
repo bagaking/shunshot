@@ -26,6 +26,7 @@ const Capture: React.FC<CaptureProps> = ({ captureData }) => {
     completeCapture,
     cancelCapture,
     getBoundsFromRect,
+    handleOCR,
   } = useCapture()
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -314,6 +315,10 @@ const Capture: React.FC<CaptureProps> = ({ captureData }) => {
                 completeCapture(bounds)
               }}
               onCancel={cancelCapture}
+              onOCR={() => {
+                const bounds = getBoundsFromRect(selectedRect)
+                return handleOCR(bounds)
+              }}
               selectedBounds={selectedRect ? getBoundsFromRect(selectedRect) : null}
             />
           </div>

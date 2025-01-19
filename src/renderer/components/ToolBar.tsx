@@ -4,6 +4,7 @@ import { CaptureBounds } from '../types/capture'
 interface ToolBarProps {
   onConfirm: () => void
   onCancel: () => void
+  onOCR: ()=> Promise<{text?: string, error?: any}>
   selectedBounds: CaptureBounds | null
 }
 
@@ -20,7 +21,7 @@ interface OCRResult {
   error?: string
 }
 
-export const ToolBar: React.FC<ToolBarProps> = ({ onConfirm, onCancel, selectedBounds }) => {
+export const ToolBar: React.FC<ToolBarProps> = ({ onConfirm, onCancel, onOCR, selectedBounds }) => {
   const [activeTooltip, setActiveTooltip] = useState<string>('')
   const [ocrResult, setOcrResult] = useState<OCRResult | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -33,11 +34,15 @@ export const ToolBar: React.FC<ToolBarProps> = ({ onConfirm, onCancel, selectedB
 
     setIsProcessing(true)
     try {
-      const result = await window.electronAPI.requestOCR(selectedBounds)
-      if ('error' in result) {
-        setOcrResult({ error: result.error })
-      } else if ('text' in result) {
-        setOcrResult({ text: result.text })
+      const result = await onOCR()
+      if (result.error) {
+        setOcrResult({ 
+          error: result.error 
+        })
+      } else {
+        setOcrResult({ 
+          text: result.text 
+        })
       }
     } catch (error) {
       setOcrResult({ error: '识别失败,请重试' })

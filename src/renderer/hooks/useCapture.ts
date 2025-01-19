@@ -57,6 +57,36 @@ export const useCapture = () => {
     }
   }, [selectedRect, displayInfo])
 
+
+  const handleOCR = useCallback(async (bounds: CaptureBounds): Promise<{text?: string, error?: any}> => {
+    debugHelper.logEvent('Completing capture')
+    console.log('Completing capture with bounds:', bounds)
+    
+    if (!displayInfo) {
+      const error = 'No display info available'
+      console.error(error)
+      return {error}
+    }
+
+    try {
+      // 转换为实际像素坐标
+      const scaledBounds = {
+        x: Math.round(bounds.x * displayInfo.scaleFactor),
+        y: Math.round(bounds.y * displayInfo.scaleFactor),
+        width: Math.round(bounds.width * displayInfo.scaleFactor),
+        height: Math.round(bounds.height * displayInfo.scaleFactor)
+      }
+      
+      debugHelper.logEvent('Scaled bounds calculated')
+      console.log('Scaled bounds:', scaledBounds)
+      return await window.electronAPI.requestOCR(scaledBounds)
+      
+    } catch (error: unknown) {
+      return { error }
+    }
+    
+  }, [navigate, displayInfo])
+
   // 处理鼠标事件
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     try {
@@ -269,5 +299,6 @@ export const useCapture = () => {
     completeCapture,
     cancelCapture,
     getBoundsFromRect,
+    handleOCR,
   }
 } 

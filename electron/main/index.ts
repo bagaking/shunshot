@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, screen, desktopCapturer, clipboard } from 'electron'
+import { app, BrowserWindow, ipcMain, globalShortcut, screen, desktopCapturer, clipboard, Tray, nativeImage, Menu } from 'electron'
 import { join } from 'path'
 import { CHANNELS } from '../../src/types/ipc'
 import { Logger } from './logger'
@@ -43,6 +43,7 @@ if (!app.isPackaged) {
 
 let mainWindow: BrowserWindow | null = null
 let captureWindow: BrowserWindow | null = null
+let tray: Tray | null = null
 
 // 存储当前截图数据
 let currentCaptureData: {
@@ -189,6 +190,69 @@ const createCaptureWindow = async () => {
   }
 }
 
+const createTray = () => {
+  Logger.log('Creating tray icon...')
+  
+  // 创建托盘图标
+  const icon = nativeImage.createFromPath(join(process.env.VITE_PUBLIC, 'icon.png'))
+  tray = new Tray(icon.resize({ width: 16, height: 16 }))
+  
+  // 设置托盘菜单
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '显示主窗口',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        }
+      }
+    },
+    {
+      label: '开始截图',
+      accelerator: process.platform === 'darwin' ? 'Cmd+Shift+X' : 'Ctrl+Shift+X',
+      click: async () => {
+        if (mainWindow) {
+          mainWindow.hide()
+        }
+        try {
+          await createCaptureWindow()
+        } catch (error) {
+          Logger.error('Failed to start capture from tray', error as Error)
+          if (mainWindow) {
+            mainWindow.show()
+          }
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        app.quit()
+      }
+    }
+  ])
+
+  // 设置托盘提示文本
+  tray.setToolTip('Shunshot')
+  
+  // 设置托盘菜单
+  tray.setContextMenu(contextMenu)
+  
+  // 点击托盘图标时切换主窗口显示状态
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide()
+      } else {
+        mainWindow.show()
+        mainWindow.focus()
+      }
+    }
+  })
+}
+
 const createWindow = async () => {
   Logger.log('Creating main window...')
   mainWindow = new BrowserWindow({
@@ -203,7 +267,7 @@ const createWindow = async () => {
     transparent: true,
     resizable: false,
     alwaysOnTop: true,
-    skipTaskbar: false,
+    skipTaskbar: true,
     hasShadow: true,
     type: 'panel',
   })
@@ -264,6 +328,7 @@ const registerShortcuts = () => {
 app.whenReady().then(() => {
   console.log('App ready, initializing...')
   createWindow()
+  createTray()
   registerShortcuts()
 })
 
@@ -413,9 +478,22 @@ ipcMain.handle(CHANNELS.OCR_REQUEST, async (event, bounds) => {
     const response = await openai.chat.completions.create({
       messages: [
         {
+          role: 'system',
+          content: `你是一个图片内容识别专家，根据用户给到的图片，识别出原始文本, 组织格式后输出
+注意:
+- 用 Markdown 格式输出
+- 如果没有文字，就返回"未检测到文字
+- 只输出原始内容，不要加任何解释
+- 文本分为多个区域时，也分段输出。顺序按照布局从上到下, 从左到右进行
+- 识别到代码时，用代码段输出
+`
+        },
+        {
           role: 'user',
           content: [
-            { type: 'text', text: '请识别这张图片中的文字内容，直接返回文字，按照布局从上到下, 从左到右进行分段输出，不要加任何解释。如果没有文字，就返回"未检测到文字"。' },
+            { type: 'text', 
+              text: '这张图片说了啥' 
+            },
             {
               type: 'image_url',
               image_url: {
@@ -426,7 +504,7 @@ ipcMain.handle(CHANNELS.OCR_REQUEST, async (event, bounds) => {
         },
       ],
       model: 'ep-20250119144040-f2bqg',
-      max_tokens: 1000,
+      max_tokens: 4096,
       temperature: 0,
     })
 
