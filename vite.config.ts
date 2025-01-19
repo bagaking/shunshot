@@ -60,11 +60,19 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
+        capture: resolve(__dirname, 'src/renderer/capture.html'),
       },
     },
   },
   server: {
     port: 5173,
     strictPort: true,
+    open: false,
   },
+  root: process.cwd(),
+  publicDir: 'public',
+  base: './',
+  optimizeDeps: {
+    include: ['react', 'react-dom']
+  }
 }) 

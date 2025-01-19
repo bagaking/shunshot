@@ -1,20 +1,16 @@
 import React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { HashRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
-import Capture from './pages/Capture'
 
 const queryClient = new QueryClient()
 
 const MainContent: React.FC = () => {
   console.log('MainContent rendering, location:', useLocation())
-  const navigate = useNavigate()
   
   const handleScreenshot = async () => {
     console.log('Screenshot button clicked')
     try {
       await window.electronAPI.captureScreen()
-      console.log('Navigating to /capture')
-      navigate('/capture')
     } catch (error) {
       console.error('Screenshot failed:', error)
     }
@@ -49,7 +45,6 @@ const App: React.FC = () => {
       <HashRouter>
         <Routes>
           <Route path="/" element={<MainContent />} />
-          <Route path="/capture" element={<Capture />} />
         </Routes>
       </HashRouter>
     </QueryClientProvider>

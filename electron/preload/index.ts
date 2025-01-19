@@ -1,34 +1,79 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import { CaptureData, CaptureBounds } from '../../src/renderer/types/capture'
+import { IElectronAPI } from '../../src/types/electron'
 
-// 暴露安全的 API 到渲染进程
-contextBridge.exposeInMainWorld('electronAPI', {
-  // 截图相关
-  captureScreen: () => ipcRenderer.invoke('SCREENSHOT_CAPTURE'),
-  cancelCapture: () => ipcRenderer.invoke('CANCEL_CAPTURE'),
-  completeCapture: (bounds: { x: number, y: number, width: number, height: number }) => 
-    ipcRenderer.invoke('COMPLETE_CAPTURE', bounds),
-  
-  // 监听截图开始
+// 创建安全的 channel 名称常量
+const CHANNELS = {
+  SCREENSHOT_CAPTURE: 'SCREENSHOT_CAPTURE',
+  START_CAPTURE: 'START_CAPTURE',
+  SCREEN_CAPTURE_DATA: 'SCREEN_CAPTURE_DATA',
+  COMPLETE_CAPTURE: 'COMPLETE_CAPTURE',
+  CANCEL_CAPTURE: 'CANCEL_CAPTURE',
+  COPY_TO_CLIPBOARD: 'COPY_TO_CLIPBOARD',
+  PLUGIN_LOAD: 'PLUGIN_LOAD',
+  LOG: 'LOG'
+} as const
+
+// 暴露给渲染进程的 API
+const api: IElectronAPI = {
+  captureScreen: () => {
+    return ipcRenderer.invoke(CHANNELS.SCREENSHOT_CAPTURE)
+  },
+
   onStartCapture: (callback: () => void) => {
     const wrappedCallback = (_event: IpcRendererEvent) => callback()
-    ipcRenderer.on('START_CAPTURE', wrappedCallback)
-    return () => {
-      ipcRenderer.removeListener('START_CAPTURE', wrappedCallback)
-    }
+    ipcRenderer.on(CHANNELS.START_CAPTURE, wrappedCallback)
+    return () => ipcRenderer.removeListener(CHANNELS.START_CAPTURE, wrappedCallback)
   },
-  
-  // 监听屏幕截图数据
-  onScreenCaptureData: (callback: (imageData: string) => void) => {
-    const wrappedCallback = (_event: IpcRendererEvent, imageData: string) => callback(imageData)
-    ipcRenderer.on('SCREEN_CAPTURE_DATA', wrappedCallback)
-    return () => {
-      ipcRenderer.removeListener('SCREEN_CAPTURE_DATA', wrappedCallback)
-    }
+
+  onScreenCaptureData: (callback: (data: CaptureData) => void) => {
+    const wrappedCallback = (_event: IpcRendererEvent, data: CaptureData) => callback(data)
+    ipcRenderer.on(CHANNELS.SCREEN_CAPTURE_DATA, wrappedCallback)
+    return () => ipcRenderer.removeListener(CHANNELS.SCREEN_CAPTURE_DATA, wrappedCallback)
   },
-  
+
+  completeCapture: (bounds: CaptureBounds) => {
+    return ipcRenderer.invoke(CHANNELS.COMPLETE_CAPTURE, bounds)
+  },
+
+  cancelCapture: () => {
+    ipcRenderer.send(CHANNELS.CANCEL_CAPTURE)
+  },
+
+  copyToClipboard: (bounds: CaptureBounds) => {
+    return ipcRenderer.invoke(CHANNELS.COPY_TO_CLIPBOARD, bounds)
+  },
+
   // 插件相关
-  loadPlugin: (pluginId: string) => ipcRenderer.invoke('PLUGIN_LOAD', pluginId),
+  loadPlugin: (pluginId: string) => ipcRenderer.invoke(CHANNELS.PLUGIN_LOAD, pluginId),
   
   // 系统相关
   platform: process.platform,
-}) 
+  
+  // 日志相关
+  log: (level: 'log' | 'info' | 'warn' | 'error', ...args: any[]) => {
+    ipcRenderer.send(CHANNELS.LOG, level, ...args)
+  }
+}
+
+// 重写 console 方法
+const originalConsole = { ...console }
+console.log = (...args) => {
+  api.log('log', ...args)
+  originalConsole.log(...args)
+}
+console.info = (...args) => {
+  api.log('info', ...args)
+  originalConsole.info(...args)
+}
+console.warn = (...args) => {
+  api.log('warn', ...args)
+  originalConsole.warn(...args)
+}
+console.error = (...args) => {
+  api.log('error', ...args)
+  originalConsole.error(...args)
+}
+
+// 使用 contextBridge 安全地暴露 API
+contextBridge.exposeInMainWorld('electronAPI', api) 
