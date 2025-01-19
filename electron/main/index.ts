@@ -446,4 +446,26 @@ ipcMain.handle(CHANNELS.HIDE_WINDOW, async () => {
   if (mainWindow) {
     mainWindow.hide()
   }
+})
+
+ipcMain.handle(CHANNELS.SHOW_WINDOW, async () => {
+  Logger.log('Showing main window')
+  if (mainWindow) {
+    mainWindow.show()
+    mainWindow.focus()
+  }
+})
+
+// 处理窗口大小调整
+ipcMain.handle(CHANNELS.SET_WINDOW_SIZE, async (event, width: number, height: number) => {
+  Logger.log(`Setting window size to ${width}x${height}`)
+  if (mainWindow) {
+    // 设置窗口大小，包括边框
+    mainWindow.setSize(width, height)
+    // 设置内容区域大小，不包括边框
+    mainWindow.setContentSize(width, height)
+    // 由于窗口大小变化，需要重新计算位置以保持在右下角
+    const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
+    mainWindow.setPosition(screenWidth - width - 20, screenHeight - height - 20)
+  }
 }) 

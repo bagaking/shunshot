@@ -38,6 +38,14 @@ const api: IElectronAPI = {
     return ipcRenderer.invoke(CHANNELS.HIDE_WINDOW)
   },
 
+  showWindow: () => {
+    return ipcRenderer.invoke(CHANNELS.SHOW_WINDOW)
+  },
+
+  setWindowSize: (width, height) => {
+    return ipcRenderer.invoke(CHANNELS.SET_WINDOW_SIZE, width, height)
+  },
+
   // 插件相关
   loadPlugin: (pluginId: string) => ipcRenderer.invoke(CHANNELS.PLUGIN_LOAD, pluginId),
   

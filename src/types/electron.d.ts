@@ -12,7 +12,9 @@ export interface IElectronAPI {
   
   // 窗口相关
   hideWindow: () => Promise<void>
-  
+  showWindow: () => Promise<void>
+  setWindowSize: (width: number, height: number) => Promise<void>
+
   // 插件相关
   loadPlugin: (pluginId: string) => Promise<void>
 
