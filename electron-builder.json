@@ -1,0 +1,23 @@
+{
+  "appId": "com.shunshot.app",
+  "productName": "Shunshot",
+  "directories": {
+    "output": "release/${version}"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "mac": {
+    "target": ["dmg"],
+    "category": "public.app-category.graphics-design"
+  },
+  "win": {
+    "target": ["nsis"],
+    "icon": "build/icon.ico"
+  },
+  "linux": {
+    "target": ["AppImage"],
+    "category": "Graphics"
+  }
+} 
