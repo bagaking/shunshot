@@ -1,18 +1,7 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 import { CaptureData, CaptureBounds } from '../../src/renderer/types/capture'
 import { IElectronAPI } from '../../src/types/electron'
-
-// 创建安全的 channel 名称常量
-const CHANNELS = {
-  SCREENSHOT_CAPTURE: 'SCREENSHOT_CAPTURE',
-  START_CAPTURE: 'START_CAPTURE',
-  SCREEN_CAPTURE_DATA: 'SCREEN_CAPTURE_DATA',
-  COMPLETE_CAPTURE: 'COMPLETE_CAPTURE',
-  CANCEL_CAPTURE: 'CANCEL_CAPTURE',
-  COPY_TO_CLIPBOARD: 'COPY_TO_CLIPBOARD',
-  PLUGIN_LOAD: 'PLUGIN_LOAD',
-  LOG: 'LOG'
-} as const
+import { CHANNELS } from '../../src/types/ipc'
 
 // 暴露给渲染进程的 API
 const api: IElectronAPI = {

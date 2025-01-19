@@ -106,6 +106,8 @@ class DebugHelper {
   }
 
   logEvent(event: string) {
+    window.electronAPI.log("info", event)
+
     if (!this._isEnabled) return;
     
     this.events.push(`${new Date().toISOString().split('T')[1]}: ${event}`);
