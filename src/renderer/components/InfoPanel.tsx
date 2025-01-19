@@ -75,10 +75,8 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({
       positionOffset={{ x: 0, y: 0 }}
       scale={1}
     >
-      <div className={`
-        flex items-center space-x-4 
-        bg-black/95 backdrop-blur-sm text-white px-5 py-2.5 rounded-lg shadow-lg
-        transition-all duration-150 select-none
+      <div className={`flex items-center space-x-4 bg-black/95 backdrop-blur-sm text-white px-5 py-2.5 
+      rounded-lg shadow-lg transition-all duration-150 select-none
         ${isDragging ? 'ring-2 ring-blue-500/50' : ''}
       `}>
         {/* 拖动手柄 */}

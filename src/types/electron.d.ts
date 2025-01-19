@@ -12,6 +12,9 @@ export interface IElectronAPI {
   
   // 插件相关
   loadPlugin: (pluginId: string) => Promise<void>
+
+  requestOCR: (bounds: CaptureBounds) => Promise<{ text?: string, error?: any }>
+
   
   // 系统相关
   platform: string

@@ -2,6 +2,13 @@ import { app, BrowserWindow, ipcMain, globalShortcut, screen, desktopCapturer, c
 import { join } from 'path'
 import { CHANNELS } from '../../src/types/ipc'
 import { Logger } from './logger'
+import OpenAI from 'openai'
+
+// 初始化 OpenAI 客户端
+const openai = new OpenAI({
+  apiKey: process.env.ARK_API_KEY,
+  baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
+})
 
 // 设置环境变量
 process.env.DIST_ELECTRON = join(__dirname, '..')
@@ -364,5 +371,55 @@ ipcMain.on(CHANNELS.LOG, (event, level: 'log' | 'info' | 'warn' | 'error', ...ar
     case 'error':
       Logger.error(args.join(' '), null, event.sender, mainWindow, captureWindow)
       break
+  }
+})
+
+// 处理 OCR 请求
+ipcMain.handle(CHANNELS.OCR_REQUEST, async (event, bounds) => {
+  Logger.log('Received OCR request', event.sender, mainWindow, captureWindow)
+  
+  if (!currentCaptureData) {
+    Logger.error('No capture data available', null, event.sender, mainWindow, captureWindow)
+    return { error: 'No capture data available' }
+  }
+
+  try {
+    const { fullImage } = currentCaptureData
+    const { x, y, width, height } = bounds
+
+    // 裁剪选中区域
+    const croppedImage = fullImage.crop({ x, y, width, height })
+    
+    // 转换为 base64
+    const base64Image = croppedImage.toDataURL().replace(/^data:image\/\w+;base64,/, '')
+    
+    // 调用 OCR API
+    const response = await openai.chat.completions.create({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: '请识别这张图片中的文字内容，直接返回文字，按照布局从上到下, 从左到右进行分段输出，不要加任何解释。如果没有文字，就返回"未检测到文字"。' },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`,
+              },
+            },
+          ],
+        },
+      ],
+      model: 'ep-20250119144040-f2bqg',
+      max_tokens: 1000,
+      temperature: 0,
+    })
+
+    const result = response.choices[0]?.message?.content || '识别失败'
+    Logger.log('OCR result: '+ result)
+    
+    return { text: result }
+  } catch (error) {
+    Logger.error('Failed to process OCR', error as Error, event.sender, mainWindow, captureWindow)
+    return { error: 'OCR processing failed' }
   }
 }) 

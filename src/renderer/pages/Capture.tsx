@@ -273,15 +273,15 @@ const Capture: React.FC<CaptureProps> = ({ captureData }) => {
             className="absolute z-[9999]"
             style={{
               left: selectedRect.width > 0 
-                ? selectedRect.startX + Math.abs(selectedRect.width) / 2
-                : selectedRect.startX + selectedRect.width + Math.abs(selectedRect.width) / 2,
+                ? selectedRect.startX
+                : selectedRect.startX + selectedRect.width,
               top: Math.max(
                 10, 
                 (selectedRect.height > 0 
                   ? selectedRect.startY 
                   : selectedRect.startY + selectedRect.height) - 45
               ),
-              transform: 'translate(-50%, 0)',
+              
             }}
           >
             <InfoPanel
@@ -314,6 +314,7 @@ const Capture: React.FC<CaptureProps> = ({ captureData }) => {
                 completeCapture(bounds)
               }}
               onCancel={cancelCapture}
+              selectedBounds={selectedRect ? getBoundsFromRect(selectedRect) : null}
             />
           </div>
         </>

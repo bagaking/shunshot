@@ -42,8 +42,13 @@ const api: IElectronAPI = {
   // 日志相关
   log: (level: 'log' | 'info' | 'warn' | 'error', ...args: any[]) => {
     ipcRenderer.send(CHANNELS.LOG, level, ...args)
-  }
-}
+  },
+
+  // OCR 识别
+  requestOCR: async (bounds: CaptureBounds) => {
+    return await ipcRenderer.invoke(CHANNELS.OCR_REQUEST, bounds)
+  },
+} as const
 
 // 重写 console 方法
 const originalConsole = { ...console }
@@ -65,4 +70,4 @@ console.error = (...args) => {
 }
 
 // 使用 contextBridge 安全地暴露 API
-contextBridge.exposeInMainWorld('electronAPI', api) 
+contextBridge.exposeInMainWorld('electronAPI', api)
