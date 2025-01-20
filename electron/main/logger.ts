@@ -57,50 +57,29 @@ export class Logger {
   /**
    * 普通日志
    */
-  static log(
-    message: string,
-    sender: WebContents | null = null,
-    mainWindow: BrowserWindow | null = null,
-    captureWindow: BrowserWindow | null = null
-  ): void {
-    console.log(this.format('INFO', message, null, sender, mainWindow, captureWindow))
+  static log(message: string, ...args: any[]): void {
+    console.log(`[LOG] ${message}`, ...args)
   }
 
   /**
    * 信息日志
    */
-  static info(
-    message: string,
-    sender: WebContents | null = null,
-    mainWindow: BrowserWindow | null = null,
-    captureWindow: BrowserWindow | null = null
-  ): void {
-    console.info(this.format('INFO', message, null, sender, mainWindow, captureWindow))
+  static info(message: string, ...args: any[]): void {
+    console.info(`[INFO] ${message}`, ...args)
   }
 
   /**
    * 警告日志
    */
-  static warn(
-    message: string,
-    sender: WebContents | null = null,
-    mainWindow: BrowserWindow | null = null,
-    captureWindow: BrowserWindow | null = null
-  ): void {
-    console.warn(this.format('WARN', message, null, sender, mainWindow, captureWindow))
+  static warn(message: string, ...args: any[]): void {
+    console.warn(`[WARN] ${message}`, ...args)
   }
 
   /**
    * 错误日志
    */
-  static error(
-    message: string,
-    error: Error | null = null,
-    sender: WebContents | null = null,
-    mainWindow: BrowserWindow | null = null,
-    captureWindow: BrowserWindow | null = null
-  ): void {
-    console.error(this.format('ERROR', message, error, sender, mainWindow, captureWindow))
+  static error(message: string, error?: Error): void {
+    console.error(`[ERROR] ${message}`, error)
   }
 
   /**

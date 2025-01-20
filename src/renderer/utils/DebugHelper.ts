@@ -106,7 +106,7 @@ class DebugHelper {
   }
 
   logEvent(event: string) {
-    window.electronAPI.log("info", event)
+    console.info(event)
 
     if (!this._isEnabled) return;
     

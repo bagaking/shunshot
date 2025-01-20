@@ -79,7 +79,7 @@ export const useCapture = () => {
       
       debugHelper.logEvent('Scaled bounds calculated')
       console.log('Scaled bounds:', scaledBounds)
-      return await window.electronAPI.requestOCR(scaledBounds)
+      return await window.shunshotCoreAPI.requestOCR(scaledBounds)
       
     } catch (error: unknown) {
       return { error }
@@ -219,11 +219,11 @@ export const useCapture = () => {
 
       // 复制到剪贴板
       console.log('Copying to clipboard')
-      const copyResult = await window.electronAPI.copyToClipboard(scaledBounds)
+      const copyResult = await window.shunshotCoreAPI.copyToClipboard(scaledBounds)
       debugHelper.logEvent(`Copy to clipboard result: ${copyResult}`)
       
       // 完成截图
-      await window.electronAPI.completeCapture(scaledBounds)
+      await window.shunshotCoreAPI.completeCapture(scaledBounds)
       debugHelper.logEvent('Capture completed')
       
       // 等待操作完成
@@ -257,7 +257,7 @@ export const useCapture = () => {
       setMousePosition({ x: 0, y: 0 })
       
       // 发送取消事件
-      window.electronAPI.cancelCapture()
+      window.shunshotCoreAPI.cancelCapture()
       
       // 导航回主页
       navigate('/')
@@ -290,6 +290,7 @@ export const useCapture = () => {
     mousePosition,
     displayInfo,
     isDraggingSelection,
+    
     setDisplayInfo,
     setIsDraggingSelection,
     handleMouseDown,

@@ -97,7 +97,7 @@ const Capture: React.FC<CaptureProps> = ({ captureData }) => {
   // 监听截图开始事件
   useEffect(() => {
     console.log('Setting up START_CAPTURE listener')
-    const cleanup = window.electronAPI.onStartCapture(() => {
+    const cleanup = window.shunshotCoreAPI.onStartCapture(() => {
       console.log('START_CAPTURE event received')
     })
 

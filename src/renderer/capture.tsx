@@ -56,8 +56,8 @@ const CaptureWrapper: React.FC = () => {
     }
 
     try {
-      window.electronAPI.onScreenCaptureData(handleScreenCaptureData)
-      window.electronAPI.onStartCapture(handleStartCapture)
+      window.shunshotCoreAPI.onScreenCaptureData(handleScreenCaptureData)
+      window.shunshotCoreAPI.onStartCapture(handleStartCapture)
     } catch (error) {
       console.error('Error setting up event listeners:', error)
     }

@@ -1,7 +1,7 @@
 import { CaptureData, CaptureBounds } from '../renderer/types/capture'
 
 // 定义 Electron API 接口
-export interface IElectronAPI {
+export interface IShunshotCoreAPI {
   // 截图相关
   captureScreen: () => Promise<void>
   onStartCapture: (callback: () => void) => () => void
@@ -18,20 +18,27 @@ export interface IElectronAPI {
   // 插件相关
   loadPlugin: (pluginId: string) => Promise<void>
 
+  // OCR 相关
   requestOCR: (bounds: CaptureBounds) => Promise<{ text?: string, error?: any }>
 
-  
   // 系统相关
   platform: string
 
   // 日志相关
-  log: (level: 'log' | 'info' | 'warn' | 'error', ...args: any[]) => void
+  mainLog: {
+    log: (...args: any[]) => void
+    info: (...args: any[]) => void
+    warn: (...args: any[]) => void
+    error: (...args: any[]) => void
+    debug: (...args: any[]) => void
+  }
 }
 
 // 扩展全局 Window 接口
 declare global {
   interface Window {
-    readonly electronAPI: IElectronAPI
+    readonly shunshotCoreAPI: IShunshotCoreAPI
+    readonly mainLog: ILogger
   }
 }
 

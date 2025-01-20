@@ -12,12 +12,12 @@ const MainContent: React.FC = () => {
   const handleScreenshot = async () => {
     console.log('Screenshot button clicked')
     try {
-      await window.electronAPI.hideWindow()
-      await window.electronAPI.captureScreen()
-      await window.electronAPI.showWindow()
+      await window.shunshotCoreAPI.hideWindow()
+      await window.shunshotCoreAPI.captureScreen()
+      await window.shunshotCoreAPI.showWindow()
     } catch (error) {
       console.error('Screenshot failed:', error)
-      await window.electronAPI.showWindow()
+      await window.shunshotCoreAPI.showWindow()
     }
   }
 
@@ -31,7 +31,7 @@ const MainContent: React.FC = () => {
     await new Promise(resolve => requestAnimationFrame(resolve))
     
     // 调整窗口大小
-    await window.electronAPI.setWindowSize(minimize ? 40 : 280, minimize ? 40 : 380)
+    await window.shunshotCoreAPI.setWindowSize(minimize ? 40 : 280, minimize ? 40 : 380)
     
     // 等待过渡动画完成
     setTimeout(() => {
@@ -39,10 +39,10 @@ const MainContent: React.FC = () => {
     }, 300)
   }
 
-  const shortcutKey = window.electronAPI.platform === 'darwin' ? '⌘⇧X' : 'Ctrl+Shift+X'
+  const shortcutKey = window.shunshotCoreAPI.platform === 'darwin' ? '⌘⇧X' : 'Ctrl+Shift+X'
 
   return (
-    <div className={`relative ${isMinimized ? 'w-10 h-10' : 'w-[280px]'} transition-all duration-200`}>
+    <div className={`relative ${isMinimized ? 'w-10 h-10' : 'w-[280px] h-full'} transition-all duration-200`}>
       {/* 最小化状态 */}
       <div 
         className={`w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 
@@ -69,7 +69,7 @@ const MainContent: React.FC = () => {
       {/* 展开状态 */}
       <div className={`bg-white/90 backdrop-blur-lg rounded-2xl overflow-hidden
                       shadow-[0_8px_32px_rgba(0,0,0,0.08),0_2px_4px_rgba(0,0,0,0.05)]
-                      w-full transition-all duration-200 ease-out origin-bottom-right
+                      w-full h-full transition-all duration-200 ease-out origin-bottom-right
                       [&_*]:select-none ${isTransitioning ? 'pointer-events-none' : ''}
                       ${isMinimized ? 'opacity-0 scale-0' : 'opacity-100 scale-100'}`}>
         {/* 标题栏 - 支持拖拽 */}
@@ -164,7 +164,7 @@ const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <HashRouter>
-        <div className="fixed inset-0 flex items-end justify-end p-4">
+        <div className="fixed inset-0 flex items-end justify-end">
           <Routes>
             <Route path="/" element={<MainContent />} />
           </Routes>
