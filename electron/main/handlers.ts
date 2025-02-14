@@ -9,11 +9,7 @@ import { mgrOCR } from './mgrOCR'
 /**
  * 主进程处理器
  */
-export const handlers: {
-  [K in Exclude<keyof IShunshotCoreAPI, 'platform'>]: IShunshotCoreAPI[K] extends (...args: any[]) => any
-    ? (...args: Parameters<IShunshotCoreAPI[K]>) => ReturnType<IShunshotCoreAPI[K]>
-    : never
-} = {
+export const handlers: Omit<IShunshotCoreAPI, 'onStartCapture' | 'onScreenCaptureData'> = {
   // 截图相关
   captureScreen: async () => {
     Logger.log('Screenshot capture requested')
@@ -40,7 +36,10 @@ export const handlers: {
 
       // 创建裁剪后的图像
       const croppedImage = fullImage.crop({ x, y, width, height })
-      Logger.debug({ croppedBounds: bounds, imageSize: croppedImage.getSize() })
+      Logger.debug({ 
+        message: 'Cropped image info',
+        data: { croppedBounds: bounds, imageSize: croppedImage.getSize() }
+      })
 
       // 将图像写入剪贴板
       mgrClipboard.copyImage(croppedImage)
@@ -75,7 +74,10 @@ export const handlers: {
 
       // 创建裁剪后的图像
       const croppedImage = fullImage.crop({ x, y, width, height })
-      Logger.debug({ croppedBounds: bounds, imageSize: croppedImage.getSize() })
+      Logger.debug({ 
+        message: 'Cropped image info',
+        data: { croppedBounds: bounds, imageSize: croppedImage.getSize() }
+      })
 
       // 将图像写入剪贴板
       mgrClipboard.copyImage(croppedImage)
@@ -101,10 +103,14 @@ export const handlers: {
 
   // 窗口相关
   hideWindow: async () => {
-    Logger.log('Hiding main window')
-    const mainWindow = mgrWindows.getMainWindow()
-    if (mainWindow) {
-      mainWindow.hide()
+    Logger.log('Hiding window')
+    const captureWindow = mgrWindows.getCaptureWindow()
+    if (captureWindow) {
+      captureWindow.hide()
+      Logger.debug({
+        message: 'Capture window hidden',
+        data: { timestamp: Date.now() }
+      })
     }
   },
 
@@ -162,31 +168,7 @@ export const handlers: {
     }
   },
 
-  // 事件监听相关
-  onStartCapture: () => {
-    throw new Error('Event handler should not be called in main process')
-  },
-
-  onScreenCaptureData: () => {
-    throw new Error('Event handler should not be called in main process')
-  },
-
-  // 日志相关
-  log: (level, ...args) => {
-    switch (level) {
-      case 'log':
-        Logger.log(args.join(' '))
-        break
-      case 'info':
-        Logger.info(args.join(' '))
-        break
-      case 'warn':
-        Logger.warn(args.join(' '))
-        break
-      case 'error':
-        Logger.error(args.join(' '))
-        break
-    }
-  }
+  // 系统相关
+  platform: process.platform
 }
 

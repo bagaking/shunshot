@@ -15,8 +15,8 @@ export class Logger {
     captureWindow: BrowserWindow | null
   ): string {
     if (!sender) return 'main'
-    if (sender === mainWindow?.webContents) return 'main'
-    if (sender === captureWindow?.webContents) return 'capture'
+    if (mainWindow && sender === mainWindow.webContents) return 'main'
+    if (captureWindow && sender === captureWindow.webContents) return 'capture'
     return 'unknown'
   }
 
@@ -33,7 +33,7 @@ export class Logger {
    */
   private static format(
     level: string,
-    message: string,
+    message: string | { message: string; data?: any },
     error: Error | null = null,
     sender: WebContents | null = null,
     mainWindow: BrowserWindow | null = null,
@@ -42,23 +42,39 @@ export class Logger {
     const timestamp = new Date().toISOString()
     const windowType = this.getWindowType(sender, mainWindow, captureWindow)
     const errorStr = error ? `\n${this.formatError(error)}` : ''
-    return `[${timestamp}] [${windowType}] [${level}] ${message}${errorStr}`
+    
+    let messageStr: string
+    let dataStr = ''
+    
+    if (typeof message === 'string') {
+      messageStr = message
+    } else {
+      messageStr = message.message
+      if (message.data) {
+        try {
+          dataStr = `\nData: ${JSON.stringify(message.data, null, 2)}`
+        } catch (err) {
+          dataStr = `\nData: [Unable to stringify data: ${err}]`
+        }
+      }
+    }
+    
+    return `[${timestamp}] [${windowType}] [${level}] ${messageStr}${dataStr}${errorStr}`
   }
 
   /**
    * 调试日志
    */
-  static debug(data: any): void {
+  static debug(message: string | { message: string; data?: any }): void {
     if (!this.debugMode) return
-    const message = typeof data === 'string' ? data : JSON.stringify(data, null, 2)
     console.debug(this.format('DEBUG', message))
   }
 
   /**
    * 普通日志
    */
-  static log(message: string, ...args: any[]): void {
-    console.log(`[LOG] ${message}`, ...args)
+  static log(message: string | { message: string; data?: any }): void {
+    console.log(this.format('LOG', message))
   }
 
   /**
@@ -71,15 +87,15 @@ export class Logger {
   /**
    * 警告日志
    */
-  static warn(message: string, ...args: any[]): void {
-    console.warn(`[WARN] ${message}`, ...args)
+  static warn(message: string | { message: string; data?: any }): void {
+    console.warn(this.format('WARN', message))
   }
 
   /**
    * 错误日志
    */
-  static error(message: string, error?: Error): void {
-    console.error(`[ERROR] ${message}`, error)
+  static error(message: string | { message: string; data?: any }, error?: Error): void {
+    console.error(this.format('ERROR', message, error))
   }
 
   /**

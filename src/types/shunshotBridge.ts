@@ -30,7 +30,7 @@ export class ShunshotCoreBridge extends Bridge<IShunshotCoreAPI> {
   /**
    * 获取接口原型
    */
-  protected getPrototype<T>(): T {
+  protected getPrototype(): Record<string, any> {
     return {
       // 截图相关
       captureScreen: async () => {},
@@ -52,7 +52,7 @@ export class ShunshotCoreBridge extends Bridge<IShunshotCoreAPI> {
       requestOCR: async () => ({}),
 
       // 系统相关
-      platform: '',
+      platform: process.platform,
 
       // 日志相关
       mainLog: {
@@ -62,6 +62,6 @@ export class ShunshotCoreBridge extends Bridge<IShunshotCoreAPI> {
         error: (..._args: any[]) => {},
         debug: (..._args: any[]) => {},
       }
-    } as unknown as T
+    }
   }
 } 

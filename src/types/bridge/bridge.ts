@@ -1,5 +1,5 @@
 import { IpcRenderer, IpcMain, BrowserWindow } from 'electron'
-import { IBridgeOptions, IMessageContext, IMessageWrapper, FunctionPropertyNames, BridgeChannels } from './types'
+import { IBridgeOptions, IMessageContext, IMessageWrapper, BridgeAPI, AsyncFunction, EventHandler } from './types'
 
 /**
  * Bridge 类用于自动生成 IPC 通信代码
@@ -20,14 +20,17 @@ export class Bridge<T extends Record<string, any>> {
   private readonly eventChannel: string
 
   constructor(options: IBridgeOptions) {
+    if (!options?.id) {
+      throw new Error('Bridge ID is required')
+    }
+    
     this.id = options.id
     this.prefix = options.prefix ?? 'bridge'
     this.enableLog = options.enableLog ?? true
     this.messageHandlers = new Map()
     
-    // 初始化通道名称
-    this.requestChannel = BridgeChannels.toMain(this.prefix)
-    this.eventChannel = BridgeChannels.toRenderer(this.prefix)
+    this.requestChannel = `${this.prefix}:to-main`
+    this.eventChannel = `${this.prefix}:to-renderer`
   }
 
   /**
@@ -60,88 +63,56 @@ export class Bridge<T extends Record<string, any>> {
   createPreloadApi(
     ipcRenderer: IpcRenderer,
     customImpl?: Partial<T>
-  ): T {
-    const api = {} as T
-
-    // 获取接口中定义的所有方法名
-    const methodKeys = Object.keys(customImpl || {}) as (keyof T)[]
-
-    // 先处理自定义实现
-    for (const key of methodKeys) {
-      if (customImpl?.[key]) {
-        api[key] = customImpl[key] as T[typeof key]
-      }
+  ): BridgeAPI<T> {
+    if (!ipcRenderer) {
+      throw new Error('ipcRenderer is required')
     }
 
-    // 获取所有未实现的方法
-    const remainingKeys = Object.keys(this.getPrototype<T>()).filter(
-      key => !api.hasOwnProperty(key)
-    ) as (keyof T)[]
+    const api = {} as BridgeAPI<T>
 
-    // 处理剩余的方法
-    for (const key of remainingKeys) {
-      const methodName = String(key)
+    try {
+      // 处理自定义实现
+      if (customImpl) {
+        Object.assign(api, customImpl)
+      }
 
-      // 处理事件监听方法 (on* 方法)
-      if (methodName.startsWith('on') && methodName.length > 2) {
-        const eventName = methodName.charAt(2).toLowerCase() + methodName.slice(3)
-        const method = ((callback: Function) => {
-          const wrappedCallback = (...args: any[]) => callback(...args)
-          this.on(eventName as keyof T, wrappedCallback as any)
-          return () => {
-            const handlers = this.messageHandlers.get(eventName)
-            if (handlers) {
-              const index = handlers.indexOf(wrappedCallback)
-              if (index > -1) {
-                handlers.splice(index, 1)
+      // 获取所有方法名
+      const methodNames = Object.keys(this.getPrototype()) as Array<keyof T>
+
+      // 为每个未实现的方法创建代理
+      for (const methodName of methodNames) {
+        if (!(methodName in api)) {
+          const eventName = `${this.prefix}:${String(methodName)}`
+          
+          // 处理事件监听方法
+          if (typeof methodName === 'string' && methodName.startsWith('on')) {
+            api[methodName] = ((callback: (...args: any[]) => void) => {
+              ipcRenderer.on(eventName, (_, ...args) => callback(...args))
+              return () => {
+                ipcRenderer.removeListener(eventName, callback)
               }
-            }
+            }) as any
+          } else {
+            // 处理普通方法
+            api[methodName] = (async (...args: any[]) => {
+              return ipcRenderer.invoke(eventName, ...args)
+            }) as any
           }
-        }) as T[typeof key]
-
-        api[key] = method
-        continue
+        }
       }
 
-      // 处理普通方法
-      type MethodType = T[typeof key] & Function
-      const method = ((...args: Parameters<MethodType>) => {
-        const wrapped = this.wrapMessage({
-          method: key,
-          args
-        })
-
-        if (this.enableLog) {
-          console.log(`[Bridge:${this.id}] Request:`, wrapped)
-        }
-
-        return ipcRenderer.invoke(this.requestChannel, wrapped)
-      }) as T[typeof key]
-
-      api[key] = method
+      return api
+    } catch (error) {
+      console.error('Failed to create preload API:', error)
+      throw error
     }
-
-    // 监听来自主进程的事件
-    ipcRenderer.on(this.eventChannel, (_, message: IMessageWrapper) => {
-      if (message.ctx.bridgeId !== this.id) return
-      
-      const handlers = this.messageHandlers.get(message.payload.method) || []
-      if (handlers.length > 0) {
-        if (this.enableLog) {
-          console.log(`[Bridge:${this.id}] Received Event:`, message)
-        }
-        handlers.forEach(handler => handler(...message.payload.args))
-      }
-    })
-
-    return api
   }
 
   /**
    * 获取接口原型
    */
-  protected getPrototype<T>(): T {
-    return {} as T
+  protected getPrototype(): Record<string, any> {
+    return {}
   }
 
   /**
@@ -151,20 +122,20 @@ export class Bridge<T extends Record<string, any>> {
    */
   on<K extends keyof T>(
     method: K,
-    handler: T[K] extends Function ? T[K] : never
+    handler: T[K] extends EventHandler<any> ? Parameters<T[K]>[0] : never
   ): () => void {
-    const handlers = this.messageHandlers.get(method as string) || []
+    const handlers = this.messageHandlers.get(String(method)) || []
     handlers.push(handler)
-    this.messageHandlers.set(method as string, handlers)
+    this.messageHandlers.set(String(method), handlers)
     
     return () => {
-      const handlers = this.messageHandlers.get(method as string)
+      const handlers = this.messageHandlers.get(String(method))
       if (handlers) {
         const index = handlers.indexOf(handler)
         if (index > -1) {
           handlers.splice(index, 1)
           if (handlers.length === 0) {
-            this.messageHandlers.delete(method as string)
+            this.messageHandlers.delete(String(method))
           }
         }
       }
@@ -179,52 +150,29 @@ export class Bridge<T extends Record<string, any>> {
   registerMainHandlers(
     ipcMain: IpcMain,
     handlers: {
-      [K in FunctionPropertyNames<T>]: T[K] extends (...args: infer P) => infer R
-        ? (...args: P) => R | Promise<R>
-        : never
+      [K in keyof T]: T[K] extends AsyncFunction<any> ? T[K] :
+        T[K] extends EventHandler<any> ? never :
+        T[K] extends Function ? (...args: Parameters<T[K]>) => Promise<ReturnType<T[K]>> :
+        never
     }
   ): void {
     // 验证所有方法都已实现
-    const requiredMethods = Object.keys(handlers) as (keyof typeof handlers)[]
-    const missingMethods = requiredMethods.filter(method => !handlers[method])
-    
-    if (missingMethods.length > 0) {
-      throw new Error(`Missing handler implementations for methods: ${missingMethods.join(', ')}`)
+    const methodNames = Object.keys(handlers)
+    for (const methodName of methodNames) {
+      const eventName = `${this.prefix}:${methodName}`
+      ipcMain.handle(eventName, async (event, ...args) => {
+        try {
+          const handler = handlers[methodName as keyof T]
+          if (!handler) {
+            throw new Error(`No handler registered for method: ${methodName}`)
+          }
+          return await handler(...args)
+        } catch (error) {
+          console.error(`[Bridge:${this.id}] Error in ${methodName}:`, error)
+          throw error
+        }
+      })
     }
-
-    ipcMain.handle(this.requestChannel, async (_event, message: IMessageWrapper) => {
-      if (!this.validateBridgeId(message.ctx.bridgeId)) {
-        throw new Error(`Invalid bridge ID: ${message.ctx.bridgeId}`)
-      }
-
-      const { method, args } = message.payload
-      const handler = handlers[method as keyof typeof handlers]
-
-      if (!handler) {
-        throw new Error(`No handler registered for method: ${String(method)}`)
-      }
-
-      if (this.enableLog) {
-        console.log(`[Bridge:${this.id}] Handle Request:`, message)
-      }
-
-      try {
-        const result = await handler(...args)
-        return result
-      } catch (error) {
-        console.error(`[Bridge:${this.id}] Error in ${String(method)}:`, error)
-        throw error
-      }
-    })
-  }
-
-  /**
-   * 验证 Bridge ID
-   * 子类可以重写此方法以实现自定义的 ID 验证逻辑
-   * @param bridgeId - 要验证的 Bridge ID
-   */
-  protected validateBridgeId(bridgeId: string): boolean {
-    return bridgeId === this.id
   }
 
   /**
@@ -236,7 +184,7 @@ export class Bridge<T extends Record<string, any>> {
   emit<K extends keyof T>(
     window: BrowserWindow,
     method: K,
-    ...args: Parameters<T[K] extends Function ? T[K] : never>
+    ...args: T[K] extends EventHandler<any> ? Parameters<Parameters<T[K]>[0]> : never
   ): void {
     if (window.isDestroyed()) {
       console.warn(`[Bridge:${this.id}] Window is destroyed`)

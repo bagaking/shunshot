@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shunshot</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #root {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      /* 确保所有元素都能正确显示 */
+      .fixed {
+        position: fixed !important;
+      }
+      .absolute {
+        position: absolute !important;
+      }
+ 
+      .select-none {
+        user-select: none !important;
+        -webkit-user-select: none !important;
+      }
+
+      .pointer-events-none {
+        pointer-events: none !important;
+      }
+      .pointer-events-auto {
+        pointer-events: auto !important;
+      }
+
+      /* 窗口拖拽区域 */
+      .drag-region {
+        -webkit-app-region: drag;
+      }
+      .no-drag {
+        -webkit-app-region: no-drag;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // 添加错误处理
+      window.addEventListener('error', (event) => {
+        console.error('Global error:', event.error)
+      })
+
+      window.addEventListener('unhandledrejection', (event) => {
+        console.error('Unhandled promise rejection:', event.reason)
+      })
+
+      // 禁用默认的右键菜单
+      window.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+      })
+    </script>
+    <script type="module" src="/src/renderer/mainWindow.tsx"></script>
+  </body>
+</html> 

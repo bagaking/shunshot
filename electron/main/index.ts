@@ -2,12 +2,24 @@ import { app, ipcMain } from 'electron'
 import { join } from 'path'
 import { Logger } from './logger'
 import { ShunshotCoreBridge } from '../../src/types/shunshotBridge'
+import { IShunshotCoreAPI } from '../../src/types/electron'
 import { handlers } from './handlers'
 import { mgrWindows } from './mgrWindows'
 import { mgrShortcut } from './shortcut'
 import { mgrTray } from './trayMenu'
+import { initTransLog } from './translog'
+import { BrowserWindow } from 'electron'
 
-// 设置环境变量
+// The built directory structure
+//
+// ├─┬ dist-electron
+// │ ├─┬ main
+// │ │ └── index.js    > Electron-Main
+// │ └─┬ preload
+// │   └── index.js    > Preload-Scripts
+// ├─┬ dist
+// │ └── index.html    > Electron-Renderer
+//
 process.env.DIST_ELECTRON = join(__dirname, '..')
 process.env.DIST = join(process.env.DIST_ELECTRON, '../renderer')
 process.env.VITE_PUBLIC = process.env.VITE_DEV_SERVER_URL
@@ -32,7 +44,7 @@ if (!app.isPackaged) {
     Logger.log('Installing dev tools...')
     import('electron-devtools-installer').then(({ default: installExtension, REACT_DEVELOPER_TOOLS }) => {
       installExtension(REACT_DEVELOPER_TOOLS)
-        .then((name) => Logger.log(`Added Extension: ${name}`))
+        .then((name) => Logger.log(`Added Extension: ${JSON.stringify(name)}`))
         .catch((err) => Logger.error('Failed to install extension', err as Error))
     })
   })
@@ -49,6 +61,9 @@ app.whenReady().then(async () => {
   Logger.log('App ready, initializing...')
   
   try {
+    // 初始化日志系统
+    initTransLog()
+    
     // 创建主窗口
     await mgrWindows.createMainWindow()
     

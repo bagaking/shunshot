@@ -22,23 +22,13 @@ export interface IShunshotCoreAPI {
   requestOCR: (bounds: CaptureBounds) => Promise<{ text?: string, error?: any }>
 
   // 系统相关
-  platform: string
-
-  // 日志相关
-  mainLog: {
-    log: (...args: any[]) => void
-    info: (...args: any[]) => void
-    warn: (...args: any[]) => void
-    error: (...args: any[]) => void
-    debug: (...args: any[]) => void
-  }
+  platform: NodeJS.Platform
 }
 
 // 扩展全局 Window 接口
 declare global {
   interface Window {
     readonly shunshotCoreAPI: IShunshotCoreAPI
-    readonly mainLog: ILogger
   }
 }
 

@@ -1,27 +1,49 @@
 import React, { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom'
+import ReactDOM from 'react-dom/client'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { debugHelper } from './utils/DebugHelper'
+import { translog } from './utils/translog'
+import './index.css'
 
+translog.debug('Main window renderer starting...')
+
+// 初始化调试助手
+debugHelper.setOptions({
+  prefix: '[Main]',
+  enableConsoleOverride: true,
+  enableErrorCapture: true,
+  enablePerformanceMonitoring: true
+})
+
+// 创建 Query Client 实例
 const queryClient = new QueryClient()
 
+// 主界面内容组件
 const MainContent: React.FC = () => {
-  console.log('MainContent rendering, location:', useLocation())
+  translog.debug('MainContent rendering', {
+    location: useLocation(),
+    timestamp: Date.now()
+  })
+
   const [isMinimized, setIsMinimized] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
   
   const handleScreenshot = async () => {
-    console.log('Screenshot button clicked')
+    translog.debug('Screenshot button clicked')
     try {
       await window.shunshotCoreAPI.hideWindow()
       await window.shunshotCoreAPI.captureScreen()
       await window.shunshotCoreAPI.showWindow()
     } catch (error) {
-      console.error('Screenshot failed:', error)
+      translog.error('Screenshot failed:', error)
       await window.shunshotCoreAPI.showWindow()
     }
   }
 
   const handleMinimizeToggle = async (minimize: boolean) => {
+    translog.debug('Minimize toggle', { minimize })
     setIsTransitioning(true)
     
     // 先更新状态
@@ -30,8 +52,12 @@ const MainContent: React.FC = () => {
     // 等待一帧以确保状态更新
     await new Promise(resolve => requestAnimationFrame(resolve))
     
-    // 调整窗口大小
-    await window.shunshotCoreAPI.setWindowSize(minimize ? 40 : 280, minimize ? 40 : 380)
+    try {
+      // 调整窗口大小
+      await window.shunshotCoreAPI.setWindowSize(minimize ? 40 : 280, minimize ? 40 : 380)
+    } catch (error) {
+      translog.error('Failed to resize window:', error)
+    }
     
     // 等待过渡动画完成
     setTimeout(() => {
@@ -159,8 +185,9 @@ const MainContent: React.FC = () => {
   )
 }
 
-const App: React.FC = () => {
-  console.log('App component rendering')
+// 应用根组件
+const MainWindow: React.FC = () => {
+  translog.debug('MainWindow component rendering')
   return (
     <QueryClientProvider client={queryClient}>
       <HashRouter>
@@ -174,4 +201,18 @@ const App: React.FC = () => {
   )
 }
 
-export default App 
+// 初始化应用
+const root = document.getElementById('root')
+if (!root) {
+  translog.error('Root element not found')
+} else {
+  translog.debug('Root element found, mounting React app')
+  debugHelper.logEvent('Mounting MainWindow component')
+  ReactDOM.createRoot(root as HTMLElement).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <MainWindow />
+      </ErrorBoundary>
+    </React.StrictMode>
+  )
+} 

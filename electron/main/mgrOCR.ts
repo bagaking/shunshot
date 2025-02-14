@@ -2,26 +2,42 @@ import type { NativeImage } from 'electron'
 import OpenAI from 'openai'
 import { Logger } from './logger'
 
-// 初始化 OpenAI 客户端
-const openai = new OpenAI({
-  apiKey: process.env.ARK_API_KEY,
-  baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
-})
-
 /**
  * OCR 管理器
  */
 export class OCRManager {
+  private openai: OpenAI | null = null
+
+  constructor() {
+    try {
+      if (process.env.ARK_API_KEY) {
+        this.openai = new OpenAI({
+          apiKey: process.env.ARK_API_KEY,
+          baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
+        })
+        Logger.log('OCR service initialized')
+      } else {
+        Logger.warn('OCR service disabled: API key not found')
+      }
+    } catch (error) {
+      Logger.error('Failed to initialize OCR service', error as Error)
+    }
+  }
+
   /**
    * 识别图像中的文字
    */
   async recognizeText(image: NativeImage): Promise<{ text: string } | { error: string }> {
     try {
+      if (!this.openai) {
+        return { error: 'OCR service not available' }
+      }
+
       // 转换为 base64
       const base64Image = image.toDataURL().replace(/^data:image\/\w+;base64,/, '')
       
       // 调用 OCR API
-      const response = await openai.chat.completions.create({
+      const response = await this.openai.chat.completions.create({
         messages: [
           {
             role: 'system',

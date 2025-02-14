@@ -12,21 +12,20 @@ export default defineConfig({
       {
         // Main-Process entry file of the Electron App.
         entry: 'electron/main/index.ts',
-        onstart(options) {
-          options.startup(['.', '--no-sandbox'])
-        },
         vite: {
           build: {
             outDir: 'dist/electron/main',
             rollupOptions: {
               external: ['electron']
             }
-          },
-        },
+          }
+        }
       },
       {
         entry: 'electron/preload/index.ts',
         onstart(options) {
+          // Notify the Renderer-Process to reload the page when the Preload-Scripts build is complete, 
+          // instead of restarting the entire Electron App.
           options.reload()
         },
         vite: {
@@ -35,8 +34,8 @@ export default defineConfig({
             rollupOptions: {
               external: ['electron']
             }
-          },
-        },
+          }
+        }
       },
     ]),
     renderer(),
@@ -53,15 +52,21 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
     },
+    conditions: ['node', 'import', 'module', 'default'],
   },
   build: {
     minify: true,
     outDir: 'dist/renderer',
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'index.html'),
-        capture: resolve(__dirname, 'src/renderer/capture.html'),
+        main: resolve(__dirname, 'src/renderer/mainWindow.html'),
+        capture: resolve(__dirname, 'src/renderer/captureWindow.html'),
       },
+      external: ['electron'],
+    },
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true,
     },
   },
   server: {
@@ -73,6 +78,12 @@ export default defineConfig({
   publicDir: 'public',
   base: './',
   optimizeDeps: {
-    include: ['react', 'react-dom']
+    include: [
+      'react', 
+      'react-dom',
+      '@tanstack/react-query',
+      'react-router-dom',
+    ],
+    exclude: ['electron']
   }
 }) 

@@ -1,35 +1,4 @@
 /**
- * Bridge 通道名称管理
- */
-export class BridgeChannels {
-  /**
-   * 创建从渲染进程到主进程的请求通道名称
-   * @param prefix - Bridge 前缀
-   */
-  static toMain(prefix: string): string {
-    return `${prefix}:renderer-to-main:request`
-  }
-
-  /**
-   * 创建从主进程到渲染进程的响应通道名称
-   * @param prefix - Bridge 前缀
-   */
-  static toRenderer(prefix: string): string {
-    return `${prefix}:main-to-renderer:event`
-  }
-
-  /**
-   * 创建完整的通道名称
-   * @param prefix - Bridge 前缀
-   * @param direction - 通信方向
-   * @param type - 消息类型
-   */
-  static create(prefix: string, direction: 'up' | 'down', type: string): string {
-    return `${prefix}:${direction === 'up' ? 'renderer-to-main' : 'main-to-renderer'}:${type}`
-  }
-}
-
-/**
  * 消息上下文接口
  * 用于在消息传递过程中携带元数据
  */
@@ -86,4 +55,21 @@ export type UnwrapPromise<T> = T extends Promise<infer U>
 
 export type AsyncifyReturnType<T> = T extends (...args: infer P) => infer R
   ? (...args: P) => Promise<UnwrapPromise<R>>
-  : never 
+  : never
+
+export type AsyncFunction<T = any> = (...args: any[]) => Promise<T>
+export type EventHandler<T = any> = (callback: (...args: any[]) => void) => () => void
+
+export type BridgeMethod<T> = T extends AsyncFunction ? T :
+  T extends EventHandler ? T :
+  T extends Function ? (...args: Parameters<T>) => Promise<ReturnType<T>> :
+  never
+
+export type BridgeAPI<T> = {
+  [K in keyof T]: BridgeMethod<T[K]>
+}
+
+export const BridgeChannels = {
+  toMain: (prefix: string) => `${prefix}:to-main`,
+  toRenderer: (prefix: string) => `${prefix}:to-renderer`,
+} 

@@ -49,8 +49,9 @@ export class WindowManager {
       height: 272,
       webPreferences: {
         preload: join(process.env.DIST_ELECTRON!, 'preload/index.js'),
-        nodeIntegration: true,
+        nodeIntegration: false,
         contextIsolation: true,
+        sandbox: false,
       },
       frame: false,
       transparent: true,
@@ -67,14 +68,15 @@ export class WindowManager {
 
     // 加载页面
     if (process.env.VITE_DEV_SERVER_URL) {
-      Logger.log('Loading dev URL:', process.env.VITE_DEV_SERVER_URL)
-      await mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
+      const devUrl = process.env.VITE_DEV_SERVER_URL.replace(/\/$/, '') + '/src/renderer/mainWindow.html'
+      Logger.log(`Loading dev URL: ${devUrl}`)
+      await mainWindow.loadURL(devUrl)
       if (!app.isPackaged) {
         mainWindow.webContents.openDevTools({ mode: 'detach' })
       }
     } else {
-      const filePath = join(process.env.DIST!, 'index.html')
-      Logger.log('Loading file:', filePath)
+      const filePath = join(process.env.DIST!, 'mainWindow.html')
+      Logger.log(`Loading file: ${filePath}`)
       await mainWindow.loadFile(filePath)
     }
 
