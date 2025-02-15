@@ -16,7 +16,12 @@ export default defineConfig({
           build: {
             outDir: 'dist/electron/main',
             rollupOptions: {
-              external: ['electron']
+              external: [
+                'electron',
+                'electron-store',
+                'electron-devtools-installer',
+                ...Object.keys(require('./package.json').dependencies || {})
+              ]
             }
           }
         }
@@ -32,13 +37,20 @@ export default defineConfig({
           build: {
             outDir: 'dist/electron/preload',
             rollupOptions: {
-              external: ['electron']
+              external: [
+                'electron',
+                ...Object.keys(require('./package.json').dependencies || {})
+              ]
             }
           }
         }
       },
     ]),
-    renderer(),
+    renderer({
+      resolve: {
+        electron: { type: 'esm' }
+      }
+    }),
   ],
   css: {
     postcss: {
@@ -56,14 +68,21 @@ export default defineConfig({
   },
   build: {
     minify: true,
-    outDir: 'dist/renderer',
+    outDir: 'dist',
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'src/renderer/mainWindow.html'),
-        capture: resolve(__dirname, 'src/renderer/captureWindow.html'),
-        settings: resolve(__dirname, 'src/renderer/settingsWindow.html')
+        mainWindow: resolve(__dirname, 'src/renderer/mainWindow.html'),
+        captureWindow: resolve(__dirname, 'src/renderer/captureWindow.html'),
+        settingsWindow: resolve(__dirname, 'src/renderer/settingsWindow.html')
       },
-      external: ['electron'],
+      output: {
+        dir: 'dist'
+      },
+      external: [
+        'electron',
+        'electron-store',
+        ...Object.keys(require('./package.json').dependencies || {})
+      ]
     },
     commonjsOptions: {
       include: [/node_modules/],

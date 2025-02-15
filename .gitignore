@@ -25,3 +25,5 @@ data.json
 
 dist
 dist-electron
+dist-*
+release

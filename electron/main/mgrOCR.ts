@@ -21,13 +21,13 @@ export class OCRManager {
     })
   }
 
-  private initializeOpenAI() {
+  private async initializeOpenAI() {
     try {
-      const config = mgrPreference.get<{
+      const config = await mgrPreference.get<{
         apiKey: string
         baseURL: string
         modelName: string
-      }>('aiModel.vision')
+      }>('aiModel.vision') 
 
       if (config.apiKey) {
         this.openai = new OpenAI({
@@ -54,7 +54,7 @@ export class OCRManager {
         return { error: 'OCR service not available' }
       }
 
-      const config = mgrPreference.get<{
+      const config = await mgrPreference.get<{
         apiKey: string
         baseURL: string
         modelName: string

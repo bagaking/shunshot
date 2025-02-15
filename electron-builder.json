@@ -5,12 +5,54 @@
     "output": "release/${version}"
   },
   "files": [
-    "dist",
+    "dist/**/*",
     "package.json"
   ],
   "mac": {
     "target": ["dmg"],
-    "category": "public.app-category.graphics-design"
+    "category": "public.app-category.graphics-design",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist",
+    "extendInfo": {
+      "NSMicrophoneUsageDescription": "Please allow access to your microphone for screen recording.",
+      "NSCameraUsageDescription": "Please allow access to your camera for screen recording.",
+      "NSScreenCaptureUsageDescription": "Please allow access to your screen for screen recording.",
+      "CFBundleDocumentTypes": [],
+      "CFBundleURLTypes": [],
+      "LSUIElement": true
+    },
+    "darkModeSupport": true,
+    "helperBundleId": "${appId}.helper",
+    "helperEHBundleId": "${appId}.helper.eh",
+    "helperGPUBundleId": "${appId}.helper.gpu",
+    "helperPluginBundleId": "${appId}.helper.plugin",
+    "helperRendererBundleId": "${appId}.helper.renderer",
+    "binaries": [
+      "release/0.1.0/mac-arm64/Shunshot.app/Contents/MacOS/Shunshot"
+    ],
+    "identity": null,
+    "provisioningProfile": null,
+    "type": "distribution",
+    "electronLanguages": ["en"],
+    "electronUpdaterCompatibility": ">=2.15",
+    "forceCodeSigning": false
+  },
+  "dmg": {
+    "sign": false,
+    "contents": [
+      {
+        "x": 130,
+        "y": 220
+      },
+      {
+        "x": 410,
+        "y": 220,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ]
   },
   "win": {
     "target": ["nsis"],
@@ -19,5 +61,14 @@
   "linux": {
     "target": ["AppImage"],
     "category": "Graphics"
-  }
+  },
+  "protocols": {
+    "name": "shunshot-protocol",
+    "schemes": [
+      "shunshot"
+    ]
+  },
+  "afterSign": "scripts/notarize.js",
+  "electronVersion": "28.3.3",
+  "buildVersion": "1"
 } 
