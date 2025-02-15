@@ -30,4 +30,12 @@ export interface CaptureBounds {
   y: number
   width: number
   height: number
+}
+
+export enum CaptureMode {
+  Screenshot = 'screenshot',
+  ScreenRecording = 'screen_recording',
+  RegionSelection = 'region_selection',
+  Magnifier = 'magnifier',
+  ColorPicker = 'color_picker'
 } 

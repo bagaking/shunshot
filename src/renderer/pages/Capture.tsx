@@ -4,9 +4,8 @@ import { ToolBar } from '../components/ToolBar'
 import { DebugPanel } from '../components/DebugPanel'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { useCapture } from '../hooks/useCapture'
-import { CaptureData, DisplayInfo } from '../types/capture'
+import { CaptureData, DisplayInfo, CaptureMode } from '../types/capture'
 import { translog } from '../utils/translog'
-import { canvasHelper } from '../utils/canvasHelper'
 import { performanceHelper } from '../utils/performanceHelper'
 import { eventHelper } from '../utils/eventHelper'
 import { positionHelper } from '../utils/positionHelper'
@@ -54,7 +53,7 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
   } | null>(null)
   const loadingImageRef = useRef<HTMLImageElement | null>(null)
   const updateCanvasRef = useRef<number>(0)
-  const [isScreenRecording, setIsScreenRecording] = useState(false)
+  const [captureMode, setCaptureMode] = useState<CaptureMode>(CaptureMode.Screenshot)
 
   // 错误处理函数
   const handleError = useCallback((error: Error, context: string) => {
@@ -127,7 +126,7 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
             displayInfo,
             selectedRect,
             initialCanvasState,
-            isScreenRecording,
+            mode: captureMode,
             getBoundsFromRect,
             setInitialCanvasState,
             setCanvasInfo,
@@ -140,7 +139,7 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
         handleError(error as Error, 'updateCanvas')
       }
     }, 16),
-    [canvasRef, backgroundImage, displayInfo, selectedRect, getBoundsFromRect, handleError, isScreenRecording, initialCanvasState]
+    [canvasRef, backgroundImage, displayInfo, selectedRect, getBoundsFromRect, handleError, captureMode, initialCanvasState]
   )
 
   // 监听画布更新依赖项变化
@@ -222,19 +221,6 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
     }
 
     try {
-      const totalScale = canvasHelper.setCanvasDimensions(
-        canvasRef.current,
-        displayInfo,
-        (dimensions) => setCanvasInfo({
-          width: dimensions.width,
-          height: dimensions.height,
-          style: {
-            width: `${displayInfo.bounds.width}px`,
-            height: `${displayInfo.bounds.height}px`
-          }
-        })
-      )
-
       performanceHelper.scheduleUpdate(() => {
         void debouncedUpdateCanvas()
       })
@@ -306,7 +292,7 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
 
   // 处理模式切换
   const handleModeChange = useCallback((newIsScreenRecording: boolean) => {
-    setIsScreenRecording(newIsScreenRecording)
+    setCaptureMode(newIsScreenRecording ? CaptureMode.ScreenRecording : CaptureMode.Screenshot)
   }, [])
 
   return (
@@ -340,22 +326,21 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
         {selectedRect && (
           <>
             {/* 信息面板 */}
-            <div
-              className="absolute z-[9999]"
-              style={positionHelper.calculateInfoPanelPosition(
-                selectedRect,
-                getBoundsFromRect(selectedRect),
-                displayInfo ? displayInfo.scaleFactor / (window.devicePixelRatio || 1) : 1
-              )}
-            >
-              <MemoizedInfoPanel
-                x={getBoundsFromRect(selectedRect).x}
-                y={getBoundsFromRect(selectedRect).y}
-                width={getBoundsFromRect(selectedRect).width}
-                height={getBoundsFromRect(selectedRect).height}
-                scale={displayInfo ? displayInfo.scaleFactor / (window.devicePixelRatio || 1) : 1}
-              />
-            </div>
+            <MemoizedInfoPanel
+              x={getBoundsFromRect(selectedRect).x}
+              y={getBoundsFromRect(selectedRect).y}
+              width={getBoundsFromRect(selectedRect).width}
+              height={getBoundsFromRect(selectedRect).height}
+              scale={displayInfo ? displayInfo.scaleFactor / (window.devicePixelRatio || 1) : 1}
+              style={{
+                ...positionHelper.calculateInfoPanelPosition(
+                  selectedRect,
+                  getBoundsFromRect(selectedRect),
+                  displayInfo ? displayInfo.scaleFactor / (window.devicePixelRatio || 1) : 1
+                ),
+                zIndex: 9999
+              }}
+            />
 
             {/* 工具栏 */}
             <div
@@ -376,7 +361,7 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
                   return handleOCR(bounds)
                 }}
                 selectedBounds={selectedRect ? getBoundsFromRect(selectedRect) : null}
-                isScreenRecording={isScreenRecording}
+                isScreenRecording={captureMode === CaptureMode.ScreenRecording}
                 onModeChange={handleModeChange}
               />
             </div>

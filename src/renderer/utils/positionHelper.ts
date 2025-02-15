@@ -14,14 +14,23 @@ export const positionHelper = {
     bounds: CaptureBounds,
     scale: number = 1
   ): Position {
+    // Use same base coordinate as toolbar
+    const x = selectedRect.width > 0
+      ? selectedRect.startX
+      : selectedRect.startX + selectedRect.width
+    
+    const y = selectedRect.height > 0
+      ? selectedRect.startY
+      : selectedRect.startY
+
     return {
       left: Math.min(
-        window.innerWidth - 120,
-        Math.max(0, bounds.x * scale)
+        window.innerWidth - 200,
+        Math.max(0, x * scale)
       ),
       top: Math.min(
-        window.innerHeight - 100,
-        Math.max(10, bounds.y * scale - 45)
+        window.innerHeight - 50,
+        Math.max(10, y * scale - 45)  // Position above selection
       )
     }
   },
