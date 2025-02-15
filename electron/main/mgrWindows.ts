@@ -8,6 +8,7 @@ import { Logger } from './logger'
 export class WindowManager {
   private mainWindow: BrowserWindow | null = null
   private captureWindow: BrowserWindow | null = null
+  private settingsWindow: BrowserWindow | null = null
   private tray: Tray | null = null
   private menuManager: any = null
 
@@ -23,6 +24,10 @@ export class WindowManager {
     return this.captureWindow
   }
 
+  getSettingsWindow(): BrowserWindow | null {
+    return this.settingsWindow
+  }
+
   getTray(): Tray | null {
     return this.tray
   }
@@ -33,6 +38,10 @@ export class WindowManager {
 
   setCaptureWindow(window: BrowserWindow | null): void {
     this.captureWindow = window
+  }
+
+  setSettingsWindow(window: BrowserWindow | null): void {
+    this.settingsWindow = window
   }
 
   setTray(tray: Tray | null): void {
@@ -134,6 +143,75 @@ export class WindowManager {
     this.setTray(tray)
     return tray
   }
+
+  /**
+   * 创建设置窗口
+   */
+  async createSettingsWindow() {
+    Logger.log('Creating settings window...')
+
+    if (this.settingsWindow) {
+      this.settingsWindow.focus()
+      return this.settingsWindow
+    }
+
+    const settingsWindow = new BrowserWindow({
+      width: 800,
+      height: 600,
+      title: '设置',
+      webPreferences: {
+        preload: join(process.env.DIST_ELECTRON!, 'preload/index.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: false,
+      },
+      show: false,
+      frame: true,
+      resizable: true,
+      fullscreenable: false,
+      backgroundColor: '#ffffff',
+    })
+
+    // 设置窗口位置 - 居中显示
+    const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
+    const x = Math.floor((screenWidth - 800) / 2)
+    const y = Math.floor((screenHeight - 600) / 2)
+    settingsWindow.setPosition(x, y)
+
+    // 加载页面
+    if (process.env.VITE_DEV_SERVER_URL) {
+      const devUrl = process.env.VITE_DEV_SERVER_URL.replace(/\/$/, '') + '/src/renderer/settingsWindow.html'
+      Logger.log(`Loading dev URL: ${devUrl}`)
+      await settingsWindow.loadURL(devUrl)
+      if (!app.isPackaged) {
+        settingsWindow.webContents.openDevTools({ mode: 'detach' })
+      }
+    } else {
+      const filePath = join(process.env.DIST!, 'settingsWindow.html')
+      Logger.log(`Loading file: ${filePath}`)
+      await settingsWindow.loadFile(filePath)
+    }
+
+    // macOS 特定设置
+    if (process.platform === 'darwin') {
+      settingsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    }
+
+    // 窗口准备好时显示
+    settingsWindow.once('ready-to-show', () => {
+      settingsWindow.show()
+      settingsWindow.focus()
+    })
+
+    // 窗口关闭时清理引用
+    settingsWindow.on('closed', () => {
+      this.settingsWindow = null
+    })
+
+    this.settingsWindow = settingsWindow
+    Logger.log('Settings window created')
+    return settingsWindow
+  }
 }
 
 // 创建单例
@@ -141,4 +219,5 @@ export const mgrWindows = new WindowManager()
 
 // 导出便捷访问方法
 export const mainWindow = () => mgrWindows.getMainWindow()
-export const captureWindow = () => mgrWindows.getCaptureWindow() 
+export const captureWindow = () => mgrWindows.getCaptureWindow()
+export const settingsWindow = () => mgrWindows.getSettingsWindow() 

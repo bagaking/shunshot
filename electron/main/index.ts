@@ -7,6 +7,7 @@ import { handlers } from './handlers'
 import { mgrWindows } from './mgrWindows'
 import { mgrShortcut } from './shortcut'
 import { mgrTray } from './trayMenu'
+import { mgrPreference } from './mgrPreference'
 import { initTransLog } from './translog'
 import { BrowserWindow } from 'electron'
 
@@ -67,14 +68,23 @@ app.whenReady().then(async () => {
     // 创建主窗口
     await mgrWindows.createMainWindow()
     
-    // 设置托盘菜单管理器
-    mgrWindows.setMenuManager(mgrTray)
-    
     // 创建系统托盘
     mgrWindows.createTray()
     
+    // 设置托盘菜单管理器
+    mgrWindows.setMenuManager(mgrTray)
+    
+    
     // 注册快捷键
     mgrShortcut.registerShortcuts()
+    
+    // 监听配置变更
+    mgrPreference.subscribe((key, value) => {
+      if (key === 'system.captureShortcut') {
+        mgrShortcut.unregisterAll()
+        mgrShortcut.registerShortcuts()
+      }
+    })
     
     Logger.log('App initialization completed')
   } catch (error) {

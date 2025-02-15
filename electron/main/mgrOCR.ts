@@ -1,26 +1,47 @@
 import type { NativeImage } from 'electron'
 import OpenAI from 'openai'
 import { Logger } from './logger'
+import { mgrPreference } from './mgrPreference'
 
 /**
  * OCR 管理器
  */
 export class OCRManager {
   private openai: OpenAI | null = null
+  private unsubscribe: (() => void) | null = null
 
   constructor() {
+    this.initializeOpenAI()
+    
+    // 监听配置变更
+    this.unsubscribe = mgrPreference.subscribe((key, _) => {
+      if (key.startsWith('aiModel.vision')) {
+        this.initializeOpenAI()
+      }
+    })
+  }
+
+  private initializeOpenAI() {
     try {
-      if (process.env.ARK_API_KEY) {
+      const config = mgrPreference.get<{
+        apiKey: string
+        baseURL: string
+        modelName: string
+      }>('aiModel.vision')
+
+      if (config.apiKey) {
         this.openai = new OpenAI({
-          apiKey: process.env.ARK_API_KEY,
-          baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
+          apiKey: config.apiKey,
+          baseURL: config.baseURL,
         })
         Logger.log('OCR service initialized')
       } else {
+        this.openai = null
         Logger.warn('OCR service disabled: API key not found')
       }
     } catch (error) {
       Logger.error('Failed to initialize OCR service', error as Error)
+      this.openai = null
     }
   }
 
@@ -32,6 +53,12 @@ export class OCRManager {
       if (!this.openai) {
         return { error: 'OCR service not available' }
       }
+
+      const config = mgrPreference.get<{
+        apiKey: string
+        baseURL: string
+        modelName: string
+      }>('aiModel.vision')
 
       // 转换为 base64
       const base64Image = image.toDataURL().replace(/^data:image\/\w+;base64,/, '')
@@ -65,7 +92,7 @@ export class OCRManager {
             ],
           },
         ],
-        model: 'ep-20250119144040-f2bqg',
+        model: config.modelName,
         max_tokens: 4096,
         temperature: 0,
       })

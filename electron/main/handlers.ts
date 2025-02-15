@@ -1,15 +1,18 @@
 import { screen } from 'electron'
-import { IShunshotCoreAPI } from '../../src/types/electron'
 import { Logger } from './logger'
 import { mgrWindows } from './mgrWindows'
 import { mgrCapture } from './mgrCapture'
 import { mgrClipboard } from './mgrClipboard'
 import { mgrOCR } from './mgrOCR'
+import { mgrPreference } from './mgrPreference'
+import { mgrShortcut } from './shortcut'
+import { IShunshotCoreAPI } from '../../src/types/electron'
+import { CaptureBounds } from '../../src/renderer/types/capture'
 
 /**
  * 主进程处理器
  */
-export const handlers: Omit<IShunshotCoreAPI, 'onStartCapture' | 'onScreenCaptureData'> = {
+export const handlers: IShunshotCoreAPI = {
   // 截图相关
   captureScreen: async () => {
     Logger.log('Screenshot capture requested')
@@ -19,6 +22,18 @@ export const handlers: Omit<IShunshotCoreAPI, 'onStartCapture' | 'onScreenCaptur
       Logger.error('Failed to handle screenshot capture', error as Error)
       throw error
     }
+  },
+
+  onStartCapture: (callback: () => void) => {
+    Logger.log('Registering onStartCapture callback')
+    const unsubscribe = mgrCapture.onStart(callback)
+    return unsubscribe
+  },
+
+  onScreenCaptureData: (callback) => {
+    Logger.log('Registering onScreenCaptureData callback')
+    const unsubscribe = mgrCapture.onData(callback)
+    return unsubscribe
   },
 
   completeCapture: async (bounds) => {
@@ -137,6 +152,22 @@ export const handlers: Omit<IShunshotCoreAPI, 'onStartCapture' | 'onScreenCaptur
     }
   },
 
+  openSettings: async () => {
+    Logger.log('Opening settings window')
+    await mgrWindows.createSettingsWindow()
+  },
+
+  setIgnoreSystemShortcuts: async (ignore: boolean) => {
+    Logger.debug(`Setting ignore system shortcuts: ${ignore}`)
+    if (ignore) {
+      // 在录制时注销所有快捷键
+      mgrShortcut.unregisterAll()
+    } else {
+      // 录制完成后重新注册快捷键
+      mgrShortcut.registerShortcuts()
+    }
+  },
+
   // 插件相关
   loadPlugin: async (pluginId: string) => {
     // TODO: 实现插件加载
@@ -144,7 +175,7 @@ export const handlers: Omit<IShunshotCoreAPI, 'onStartCapture' | 'onScreenCaptur
   },
 
   // OCR 相关
-  requestOCR: async (bounds) => {
+  requestOCR: async (bounds: CaptureBounds) => {
     Logger.log('Received OCR request')
     
     const currentData = mgrCapture.getCurrentData()
@@ -166,6 +197,17 @@ export const handlers: Omit<IShunshotCoreAPI, 'onStartCapture' | 'onScreenCaptur
       Logger.error('Failed to process OCR', error as Error)
       return { error: 'OCR processing failed' }
     }
+  },
+
+  // 配置相关
+  getPreference: async <T>(key: string) => {
+    Logger.debug(`Getting preference: ${key}`)
+    return mgrPreference.get<T>(key)
+  },
+
+  setPreference: async <T>(key: string, value: T) => {
+    Logger.debug(`Setting preference: ${key}`)
+    mgrPreference.set<T>(key, value)
   },
 
   // 系统相关

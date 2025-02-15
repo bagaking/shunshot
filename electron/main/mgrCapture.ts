@@ -3,6 +3,7 @@ import { join } from 'path'
 import { Logger } from './logger'
 import { mgrWindows } from './mgrWindows'
 import { SHUNSHOT_BRIDGE_PREFIX } from '../../src/types/shunshotBridge'
+import { CaptureData } from '../../src/renderer/types/capture'
 
 /**
  * 截图管理器
@@ -12,6 +13,9 @@ export class CaptureManager {
     fullImage: NativeImage;
     bounds: { x: number; y: number; width: number; height: number };
   } | null = null
+
+  private startSubscribers: Set<() => void> = new Set()
+  private dataSubscribers: Set<(data: CaptureData) => void> = new Set()
 
   // Update timeout constants
   private readonly WINDOW_CREATE_TIMEOUT = 5000; // 5 seconds
@@ -27,6 +31,36 @@ export class CaptureManager {
 
   setCurrentData(data: typeof this.currentData) {
     this.currentData = data
+  }
+
+  onStart(callback: () => void): () => void {
+    this.startSubscribers.add(callback)
+    return () => this.startSubscribers.delete(callback)
+  }
+
+  onData(callback: (data: CaptureData) => void): () => void {
+    this.dataSubscribers.add(callback)
+    return () => this.dataSubscribers.delete(callback)
+  }
+
+  private notifyStartSubscribers(): void {
+    this.startSubscribers.forEach(callback => {
+      try {
+        callback()
+      } catch (error) {
+        Logger.error('Error in start subscriber', error as Error)
+      }
+    })
+  }
+
+  private notifyDataSubscribers(data: CaptureData): void {
+    this.dataSubscribers.forEach(callback => {
+      try {
+        callback(data)
+      } catch (error) {
+        Logger.error('Error in data subscriber', error as Error)
+      }
+    })
   }
 
   /**
@@ -74,7 +108,7 @@ export class CaptureManager {
         return result;
       } catch (error) {
         lastError = error as Error;
-        Logger.warn(`Attempt ${attempt} failed:`, error);
+        Logger.warn(`Attempt ${attempt} failed: ${error}`);
         
         const isLastAttempt = attempt === this.MAX_RETRIES;
         if (!isLastAttempt) {
@@ -191,7 +225,11 @@ export class CaptureManager {
         }
       }
 
-      // Send events immediately without delay
+      // Notify subscribers
+      this.notifyStartSubscribers()
+      this.notifyDataSubscribers(captureData)
+
+      // Send events to window
       captureWindow.webContents.send(`${SHUNSHOT_BRIDGE_PREFIX}:onStartCapture`)
       captureWindow.webContents.send(`${SHUNSHOT_BRIDGE_PREFIX}:onScreenCaptureData`, captureData)
     };

@@ -21,6 +21,16 @@ export class TrayMenuManager {
   private getMenuTemplate(): MenuItemConstructorOptions[] {
     return [
       {
+        label: 'Shunshot',
+        enabled: false,
+        icon: process.platform === 'darwin' ? undefined : '/path/to/icon.png'
+      },
+      {
+        label: `Version ${app.getVersion()}`,
+        enabled: false
+      },
+      { type: 'separator' },
+      {
         label: '显示主窗口',
         type: 'checkbox',
         checked: mgrWindows.getMainWindow()?.isVisible() ?? false,
@@ -56,6 +66,13 @@ export class TrayMenuManager {
       },
       { type: 'separator' },
       {
+        label: '设置',
+        click: async () => {
+          await mgrWindows.createSettingsWindow()
+        }
+      },
+      { type: 'separator' },
+      {
         label: '退出',
         click: () => {
           app.quit()
@@ -66,4 +83,4 @@ export class TrayMenuManager {
 }
 
 // 创建单例
-export const mgrTray = new TrayMenuManager() 
+export const mgrTray = new TrayMenuManager()

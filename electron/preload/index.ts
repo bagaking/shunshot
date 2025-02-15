@@ -22,6 +22,10 @@ const createSecureIPC = () => {
     `${SHUNSHOT_BRIDGE_PREFIX}:setWindowSize`,
     `${SHUNSHOT_BRIDGE_PREFIX}:loadPlugin`,
     `${SHUNSHOT_BRIDGE_PREFIX}:requestOCR`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:openSettings`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:getPreference`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:setPreference`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:setIgnoreSystemShortcuts`,
   ]
 
   return {
@@ -108,6 +112,22 @@ const createCoreAPI = (secureIPC: ReturnType<typeof createSecureIPC>): IShunshot
     requestOCR: async (bounds) => {
       console.debug('[Preload] Invoking requestOCR')
       return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:requestOCR`, bounds)
+    },
+    openSettings: async () => {
+      console.debug('[Preload] Invoking openSettings')
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:openSettings`)
+    },
+    getPreference: async <T>(key: string) => {
+      console.debug('[Preload] Invoking getPreference', { key })
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:getPreference`, key) as Promise<T>
+    },
+    setPreference: async <T>(key: string, value: T) => {
+      console.debug('[Preload] Invoking setPreference', { key })
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:setPreference`, key, value)
+    },
+    setIgnoreSystemShortcuts: async (ignore: boolean) => {
+      console.debug('[Preload] Invoking setIgnoreSystemShortcuts', { ignore })
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:setIgnoreSystemShortcuts`, ignore)
     },
   }
 }

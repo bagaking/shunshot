@@ -14,12 +14,18 @@ export interface IShunshotCoreAPI {
   hideWindow: () => Promise<void>
   showWindow: () => Promise<void>
   setWindowSize: (width: number, height: number) => Promise<void>
+  openSettings: () => Promise<void>
+  setIgnoreSystemShortcuts: (ignore: boolean) => Promise<void>
 
   // 插件相关
   loadPlugin: (pluginId: string) => Promise<void>
 
   // OCR 相关
   requestOCR: (bounds: CaptureBounds) => Promise<{ text?: string, error?: any }>
+
+  // 配置相关
+  getPreference: <T>(key: string) => Promise<T>
+  setPreference: <T>(key: string, value: T) => Promise<void>
 
   // 系统相关
   platform: NodeJS.Platform

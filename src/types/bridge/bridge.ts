@@ -86,7 +86,7 @@ export class Bridge<T extends Record<string, any>> {
           
           // 处理事件监听方法
           if (typeof methodName === 'string' && methodName.startsWith('on')) {
-            api[methodName] = ((callback: (...args: any[]) => void) => {
+            (api as any)[methodName] = ((callback: (...args: any[]) => void) => {
               ipcRenderer.on(eventName, (_, ...args) => callback(...args))
               return () => {
                 ipcRenderer.removeListener(eventName, callback)
@@ -94,7 +94,7 @@ export class Bridge<T extends Record<string, any>> {
             }) as any
           } else {
             // 处理普通方法
-            api[methodName] = (async (...args: any[]) => {
+            (api as any)[methodName] = (async (...args: any[]) => {
               return ipcRenderer.invoke(eventName, ...args)
             }) as any
           }

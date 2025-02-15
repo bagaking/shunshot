@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import Capture from './pages/Capture'
@@ -26,7 +26,7 @@ const CaptureWrapper: React.FC = () => {
   const [error, setError] = useState<Error | null>(null)
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [displayInfo, setDisplayInfo] = useState<DisplayInfo | null>(null)
-  const isInitialMount = useRef(true)
+  
 
   // 记录组件挂载
   useEffect(() => {

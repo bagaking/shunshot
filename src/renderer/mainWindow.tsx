@@ -42,6 +42,15 @@ const MainContent: React.FC = () => {
     }
   }
 
+  const handleOpenSettings = async () => {
+    translog.debug('Settings button clicked')
+    try {
+      await window.shunshotCoreAPI.openSettings()
+    } catch (error) {
+      translog.error('Failed to open settings:', error)
+    }
+  }
+
   const handleMinimizeToggle = async (minimize: boolean) => {
     translog.debug('Minimize toggle', { minimize })
     setIsTransitioning(true)
@@ -167,6 +176,7 @@ const MainContent: React.FC = () => {
                        text-gray-700 rounded-xl shadow-sm border border-gray-100/80
                        transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]
                        [-webkit-app-region:no-drag] group"
+            onClick={handleOpenSettings}
           >
             <span className="font-medium">设置</span>
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
