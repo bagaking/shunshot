@@ -20,6 +20,7 @@ export default defineConfig({
                 'electron',
                 'electron-store',
                 'electron-devtools-installer',
+                'ajv',
                 ...Object.keys(require('./package.json').dependencies || {})
               ]
             }

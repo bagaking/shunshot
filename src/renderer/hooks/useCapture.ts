@@ -211,6 +211,10 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
       
       translog.debug('Scaled bounds calculated', { scaledBounds })
 
+      // 先隐藏窗口
+      translog.debug('Hiding window')
+      await window.shunshotCoreAPI.hideWindow()
+
       // 复制到剪贴板
       translog.debug('Copying to clipboard')
       const copyResult = await window.shunshotCoreAPI.copyToClipboard(scaledBounds)
@@ -220,8 +224,13 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
       await window.shunshotCoreAPI.completeCapture(scaledBounds)
       translog.debug('Capture completed')
       
-      // 等待操作完成
-      await new Promise(resolve => setTimeout(resolve, 200))
+      // 等待主进程完成清理
+      await new Promise<void>((resolve) => {
+        const cleanup = window.shunshotCoreAPI.onCleanupComplete(() => {
+          cleanup() // 移除监听器
+          resolve()
+        })
+      })
       
       // 最后导航回主页
       navigate('/')
@@ -230,6 +239,7 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
       
       // 即使出错也尝试导航回主页
       try {
+        await window.shunshotCoreAPI.hideWindow()
         navigate('/')
       } catch (navError: unknown) {
         translog.error('Failed to navigate after error:', navError)
@@ -238,15 +248,29 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
   }, [navigate, displayInfo])
 
   // 取消截图
-  const cancelCapture = useCallback(() => {
+  const cancelCapture = useCallback(async () => {
     translog.debug('Canceling capture')
     try {
-      window.shunshotCoreAPI.cancelCapture()
+      // 先隐藏窗口
+      await window.shunshotCoreAPI.hideWindow()
+      
+      // 取消截图
+      await window.shunshotCoreAPI.cancelCapture()
+      
+      // 等待主进程完成清理
+      await new Promise<void>((resolve) => {
+        const cleanup = window.shunshotCoreAPI.onCleanupComplete(() => {
+          cleanup() // 移除监听器
+          resolve()
+        })
+      })
+      
       navigate('/')
     } catch (error) {
       translog.error('Failed to cancel capture:', error)
       // 即使出错也尝试导航回主页
       try {
+        await window.shunshotCoreAPI.hideWindow()
         navigate('/')
       } catch (navError) {
         translog.error('Failed to navigate after error:', navError)

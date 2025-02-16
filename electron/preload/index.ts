@@ -26,6 +26,7 @@ const createSecureIPC = () => {
     `${SHUNSHOT_BRIDGE_PREFIX}:getPreference`,
     `${SHUNSHOT_BRIDGE_PREFIX}:setPreference`,
     `${SHUNSHOT_BRIDGE_PREFIX}:setIgnoreSystemShortcuts`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:onCleanupComplete`,
   ]
 
   return {
@@ -80,6 +81,10 @@ const createCoreAPI = (secureIPC: ReturnType<typeof createSecureIPC>): IShunshot
     onScreenCaptureData: (callback) => {
       console.debug('[Preload] Setting up onScreenCaptureData listener')
       return secureIPC.on(`${SHUNSHOT_BRIDGE_PREFIX}:onScreenCaptureData`, callback)
+    },
+    onCleanupComplete: (callback) => {
+      console.debug('[Preload] Setting up onCleanupComplete listener')
+      return secureIPC.on(`${SHUNSHOT_BRIDGE_PREFIX}:onCleanupComplete`, callback)
     },
     completeCapture: async (bounds) => {
       console.debug('[Preload] Invoking completeCapture')

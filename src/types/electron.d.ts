@@ -9,6 +9,7 @@ export interface IShunshotCoreAPI {
   completeCapture: (bounds: CaptureBounds) => Promise<void>
   cancelCapture: () => void
   copyToClipboard: (bounds: CaptureBounds) => Promise<void>
+  onCleanupComplete: (callback: () => void) => () => void
   
   // 窗口相关
   hideWindow: () => Promise<void>

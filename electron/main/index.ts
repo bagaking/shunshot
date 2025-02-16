@@ -69,11 +69,16 @@ app.whenReady().then(async () => {
     await mgrWindows.createMainWindow()
     
     // 创建系统托盘
-    mgrWindows.createTray()
-    
-    // 设置托盘菜单管理器
-    mgrWindows.setMenuManager(mgrTray)
-    
+    try {
+      const tray = mgrTray.createTray()
+      if (!tray) {
+        throw new Error('Failed to create tray')
+      }
+      Logger.log('Tray created successfully')
+    } catch (error) {
+      Logger.error('Failed to create tray', error as Error)
+      // 托盘创建失败不阻止应用继续运行
+    }
     
     // 注册快捷键
     mgrShortcut.registerShortcuts()
@@ -93,15 +98,42 @@ app.whenReady().then(async () => {
   }
 })
 
-// 当所有窗口关闭时退出应用
-app.on('window-all-closed', () => {
-  Logger.log('All windows closed')
+// 清理所有资源
+const cleanup = () => {
+  Logger.log('Cleaning up resources...')
+  
   // 注销所有快捷键
   mgrShortcut.unregisterAll()
   
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  // 关闭所有窗口
+  const windows = [
+    mgrWindows.getMainWindow(),
+    mgrWindows.getCaptureWindow(),
+    mgrWindows.getSettingsWindow()
+  ]
+  
+  windows.forEach(window => {
+    if (window && !window.isDestroyed()) {
+      window.close()
+    }
+  })
+  
+  // 销毁托盘
+  mgrTray.destroy()
+  
+  Logger.log('Cleanup completed')
+}
+
+// 当所有窗口关闭时退出应用
+app.on('window-all-closed', () => {
+  Logger.log('All windows closed')
+  cleanup()
+  app.quit()
+})
+
+app.on('before-quit', () => {
+  Logger.log('Application is quitting')
+  cleanup()
 })
 
 app.on('activate', async () => {

@@ -16,6 +16,7 @@ export class CaptureManager {
 
   private startSubscribers: Set<() => void> = new Set()
   private dataSubscribers: Set<(data: CaptureData) => void> = new Set()
+  private cleanupSubscribers: Set<() => void> = new Set()
 
   // Update timeout constants
   private readonly WINDOW_CREATE_TIMEOUT = 5000; // 5 seconds
@@ -29,10 +30,6 @@ export class CaptureManager {
     return this.currentData
   }
 
-  setCurrentData(data: typeof this.currentData) {
-    this.currentData = data
-  }
-
   onStart(callback: () => void): () => void {
     this.startSubscribers.add(callback)
     return () => this.startSubscribers.delete(callback)
@@ -41,6 +38,11 @@ export class CaptureManager {
   onData(callback: (data: CaptureData) => void): () => void {
     this.dataSubscribers.add(callback)
     return () => this.dataSubscribers.delete(callback)
+  }
+
+  onCleanup(callback: () => void): () => void {
+    this.cleanupSubscribers.add(callback)
+    return () => this.cleanupSubscribers.delete(callback)
   }
 
   private notifyStartSubscribers(): void {
@@ -61,6 +63,27 @@ export class CaptureManager {
         Logger.error('Error in data subscriber', error as Error)
       }
     })
+  }
+
+  private notifyCleanupSubscribers(): void {
+    this.cleanupSubscribers.forEach(callback => {
+      try {
+        callback()
+      } catch (error) {
+        Logger.error('Error in cleanup subscriber', error as Error)
+      }
+    })
+  }
+
+  setCurrentData(data: {
+    fullImage: NativeImage;
+    bounds: { x: number; y: number; width: number; height: number };
+  } | null) {
+    this.currentData = data
+    if (data === null) {
+      // 当数据被清理时通知订阅者
+      this.notifyCleanupSubscribers()
+    }
   }
 
   /**

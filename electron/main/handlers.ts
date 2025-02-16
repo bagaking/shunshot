@@ -36,6 +36,12 @@ export const handlers: IShunshotCoreAPI = {
     return unsubscribe
   },
 
+  onCleanupComplete: (callback: () => void) => {
+    Logger.log('Registering onCleanupComplete callback')
+    const unsubscribe = mgrCapture.onCleanup(callback)
+    return unsubscribe
+  },
+
   completeCapture: async (bounds) => {
     Logger.log('Received COMPLETE_CAPTURE event')
     
@@ -58,18 +64,54 @@ export const handlers: IShunshotCoreAPI = {
 
       // 将图像写入剪贴板
       mgrClipboard.copyImage(croppedImage)
+      Logger.debug('Image copied to clipboard')
+
+      // 获取窗口引用
+      const captureWindow = mgrWindows.getCaptureWindow()
+      if (!captureWindow) {
+        Logger.warn('No capture window found')
+        return
+      }
+
+      // 检查窗口状态
+      if (captureWindow.isDestroyed()) {
+        Logger.warn('Capture window is already destroyed')
+        mgrWindows.setCaptureWindow(null)
+        return
+      }
+
+      // 先隐藏窗口
+      try {
+        captureWindow.hide()
+        Logger.debug('Capture window hidden')
+      } catch (error) {
+        Logger.error('Failed to hide window:', error)
+      }
 
       // 清理资源
       mgrCapture.setCurrentData(null)
-      Logger.log('Cleaned up capture data')
+      Logger.debug('Capture data cleared')
 
-      // 关闭截图窗口
-      const captureWindow = mgrWindows.getCaptureWindow()
-      if (captureWindow) {
-        captureWindow.close()
-      }
+      // 在下一个事件循环中关闭窗口
+      setImmediate(() => {
+        try {
+          if (captureWindow && !captureWindow.isDestroyed()) {
+            captureWindow.close()
+            Logger.debug('Capture window closed')
+          }
+          mgrWindows.setCaptureWindow(null)
+        } catch (error) {
+          Logger.error('Error closing capture window:', error)
+          // 即使关闭失败也清理引用
+          mgrWindows.setCaptureWindow(null)
+        }
+      })
+
     } catch (error) {
       Logger.error('Failed to process capture', error as Error)
+      // 出错时也要尝试清理
+      mgrCapture.setCurrentData(null)
+      mgrWindows.setCaptureWindow(null)
       throw error
     }
   },
@@ -105,15 +147,46 @@ export const handlers: IShunshotCoreAPI = {
   cancelCapture: () => {
     Logger.log('Received CANCEL_CAPTURE event')
     
+    // 获取窗口引用
+    const captureWindow = mgrWindows.getCaptureWindow()
+    if (!captureWindow) {
+      Logger.warn('No capture window found')
+      return
+    }
+
+    // 检查窗口状态
+    if (captureWindow.isDestroyed()) {
+      Logger.warn('Capture window is already destroyed')
+      mgrWindows.setCaptureWindow(null)
+      return
+    }
+
+    // 先隐藏窗口
+    try {
+      captureWindow.hide()
+      Logger.debug('Capture window hidden')
+    } catch (error) {
+      Logger.error('Failed to hide window:', error)
+    }
+
     // 清理资源
     mgrCapture.setCurrentData(null)
-    Logger.log('Cleaned up capture data')
+    Logger.debug('Capture data cleared')
 
-    // 关闭截图窗口
-    const captureWindow = mgrWindows.getCaptureWindow()
-    if (captureWindow) {
-      captureWindow.close()
-    }
+    // 在下一个事件循环中关闭窗口
+    setImmediate(() => {
+      try {
+        if (captureWindow && !captureWindow.isDestroyed()) {
+          captureWindow.close()
+          Logger.debug('Capture window closed')
+        }
+        mgrWindows.setCaptureWindow(null)
+      } catch (error) {
+        Logger.error('Error closing capture window:', error)
+        // 即使关闭失败也清理引用
+        mgrWindows.setCaptureWindow(null)
+      }
+    })
   },
 
   // 窗口相关
