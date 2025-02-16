@@ -408,6 +408,10 @@ export const canvasRenderHelper = {
       setInitialCanvasState(ctx.getImageData(0, 0, canvas.width, canvas.height))
     }
 
+    // 绘制半透明遮罩
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)' // 30% 透明度的黑色遮罩
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
     // 如果有选区,绘制选区
     if (selectedRect) {
       const bounds = getBoundsFromRect(selectedRect)
@@ -421,85 +425,32 @@ export const canvasRenderHelper = {
         height: Math.round(bounds.height * scale)
       }
 
-      // 绘制半透明遮罩 (使用物理像素坐标)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-      // 根据不同模式处理选区内容
-      switch (mode) {
-        case CaptureMode.ScreenRecording:
-          // 录屏模式：直接清除遮罩，显示实时内容
-          ctx.clearRect(
-            physicalBounds.x,
-            physicalBounds.y,
-            physicalBounds.width,
-            physicalBounds.height
-          )
-          break
-
-        case CaptureMode.Magnifier:
-          // 放大镜模式：放大选区内容
-          ctx.save()
-          ctx.clearRect(
-            physicalBounds.x,
-            physicalBounds.y,
-            physicalBounds.width,
-            physicalBounds.height
-          )
-          
-          // 创建放大效果
-          const zoomFactor = 2
-          ctx.drawImage(
-            backgroundImage,
-            physicalBounds.x / scale,
-            physicalBounds.y / scale,
-            physicalBounds.width / (scale * zoomFactor),
-            physicalBounds.height / (scale * zoomFactor),
-            physicalBounds.x,
-            physicalBounds.y,
-            physicalBounds.width,
-            physicalBounds.height
-          )
-          ctx.restore()
-          break
-
-        case CaptureMode.ColorPicker:
-          // 颜色选择器模式：显示颜色信息
-          ctx.clearRect(
-            physicalBounds.x,
-            physicalBounds.y,
-            physicalBounds.width,
-            physicalBounds.height
-          )
-          // 在这里可以添加颜色信息的显示
-          break
-
-        default:
-          // 截图模式：直接从原始背景图绘制高清内容
-          ctx.save()
-          ctx.clearRect(
-            physicalBounds.x,
-            physicalBounds.y,
-            physicalBounds.width,
-            physicalBounds.height
-          )
-          ctx.drawImage(
-            backgroundImage,
-            physicalBounds.x,
-            physicalBounds.y,
-            physicalBounds.width,
-            physicalBounds.height,
-            physicalBounds.x,
-            physicalBounds.y,
-            physicalBounds.width,
-            physicalBounds.height
-          )
-          ctx.restore()
-          break
+      // 清除选区内的遮罩,显示原图
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.fillStyle = 'rgba(0, 0, 0, 1)'
+      ctx.fillRect(physicalBounds.x, physicalBounds.y, physicalBounds.width, physicalBounds.height)
+      
+      // 恢复原图
+      ctx.globalCompositeOperation = 'source-over'
+      if (initialCanvasState) {
+        ctx.putImageData(
+          initialCanvasState,
+          0,
+          0,
+          physicalBounds.x,
+          physicalBounds.y,
+          physicalBounds.width,
+          physicalBounds.height
+        )
       }
-
-      // 绘制选区边框和装饰
-      this.drawSelectionBorder(ctx, physicalBounds, scale, mode)
+      
+      // 绘制选区边框
+      ctx.strokeStyle = '#1a73e8'
+      ctx.lineWidth = 2
+      ctx.strokeRect(physicalBounds.x, physicalBounds.y, physicalBounds.width, physicalBounds.height)
+      
+      // 绘制选区尺寸标签
+      this.drawSizeLabel(ctx, physicalBounds)
     }
 
     setCanvasInfo({
@@ -516,5 +467,17 @@ export const canvasRenderHelper = {
       duration: endTime - startTime,
       timestamp: Date.now()
     })
+  },
+
+  drawSizeLabel(ctx: CanvasRenderingContext2D, bounds: { x: number; y: number; width: number; height: number }) {
+    const label = `${bounds.width} x ${bounds.height}`
+    
+    ctx.font = '12px Arial'
+    ctx.fillStyle = '#1a73e8'
+    ctx.fillText(
+      label,
+      bounds.x + bounds.width + 8,
+      bounds.y + bounds.height + 16
+    )
   }
 } 

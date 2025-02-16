@@ -27,62 +27,111 @@ const CaptureWrapper: React.FC = () => {
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [displayInfo, setDisplayInfo] = useState<DisplayInfo | null>(null)
   
-
-  // 记录组件挂载
+  // 焦点管理
   useEffect(() => {
-    translog.debug('CaptureWrapper component mounted', {
-      timestamp: Date.now()
-    })
-
-    return () => {
-      translog.debug('CaptureWrapper component unmounting', {
+    const logWindowState = (context: string) => {
+      translog.debug(`${context}:`, {
+        hasFocus: document.hasFocus(),
+        activeElement: document.activeElement?.tagName,
+        platform: window.shunshotCoreAPI.platform,
+        windowState: {
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          outerWidth: window.outerWidth,
+          outerHeight: window.outerHeight,
+        },
         timestamp: Date.now()
       })
     }
-  }, [])
 
-  // 初始化调试模式
-  useEffect(() => {
-    const handleDebugModeChange = (enabled: boolean) => {
-      setIsDebugMode(enabled)
-      translog.debug('Debug mode changed', {
-        enabled,
+    const handleBlur = () => logWindowState('Window blur event')
+    const handleFocus = () => logWindowState('Window focus event')
+    
+    const handleMouseEvent = (e: MouseEvent) => {
+      translog.debug(`Mouse ${e.type} event:`, {
+        type: e.type,
+        button: e.button,
+        buttons: e.buttons,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        hasFocus: document.hasFocus(),
+        activeElement: document.activeElement?.tagName,
         timestamp: Date.now()
       })
+    }
+    
+    // 记录初始状态
+    logWindowState('Focus management initialized')
+    
+    // 设置事件监听器
+    window.addEventListener('blur', handleBlur)
+    window.addEventListener('focus', handleFocus)
+    window.addEventListener('mousedown', handleMouseEvent)
+    window.addEventListener('mouseup', handleMouseEvent)
+    window.addEventListener('mousemove', handleMouseEvent)
+    
+    return () => {
+      window.removeEventListener('blur', handleBlur)
+      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('mousedown', handleMouseEvent)
+      window.removeEventListener('mouseup', handleMouseEvent)
+      window.removeEventListener('mousemove', handleMouseEvent)
+    }
+  }, [])
+
+  // 组件生命周期管理
+  useEffect(() => {
+    const cleanup = [
+      setupMouseTracking(),
+      setupWindowResizing(),
+      setupDebugMode(),
+      setupCaptureEvents()
+    ]
+
+    return () => cleanup.forEach(fn => fn())
+  }, [])
+
+  // 鼠标追踪设置
+  const setupMouseTracking = () => {
+    document.addEventListener('mousemove', updateMousePosition)
+    return () => document.removeEventListener('mousemove', updateMousePosition)
+  }
+
+  // 窗口大小设置
+  const setupWindowResizing = () => {
+    const handleResize = performanceHelper.debounce(updateSize, 100)
+    window.addEventListener('resize', handleResize)
+    updateSize()
+    return () => window.removeEventListener('resize', handleResize)
+  }
+
+  // 调试模式设置
+  const setupDebugMode = () => {
+    const handleDebugModeChange = (enabled: boolean) => {
+      setIsDebugMode(enabled)
+      translog.debug('Debug mode changed', { enabled, timestamp: Date.now() })
     }
 
     debugHelper.onDebugModeChange(handleDebugModeChange)
     setIsDebugMode(debugHelper.isEnabled)
+    return () => debugHelper.offDebugModeChange(handleDebugModeChange)
+  }
 
-    return () => {
-      debugHelper.offDebugModeChange(handleDebugModeChange)
-    }
-  }, [])
-
-  // 设置事件监听器
-  useEffect(() => {
-    translog.debug('Setting up event listeners', {
-      timestamp: Date.now()
+  // 截图事件设置
+  const setupCaptureEvents = () => {
+    translog.debug('Setting up capture events', {
+      timestamp: Date.now(),
+      componentId: Math.random().toString(36).slice(2, 9)
     })
 
     const startTime = performance.now()
 
-    // 设置键盘事件监听器
-    const keyboardCleanup = eventHelper.setupKeyboardListeners({
-      onEscape: () => {
-        translog.debug('Escape key pressed, canceling capture')
-        window.shunshotCoreAPI.hideWindow()
-      }
-    })
-
-    // 设置截图开始事件监听器
     const startCaptureCleanup = eventHelper.setupCaptureStartListener(() => {
       setCaptureData(null)
       setDisplayInfo(null)
       setError(null)
     })
 
-    // 设置截图数据事件监听器
     const captureDataCleanup = eventHelper.setupCaptureDataListener(
       (data) => {
         translog.debug('Received screen capture data', {
@@ -105,20 +154,16 @@ const CaptureWrapper: React.FC = () => {
     )
 
     const endTime = performance.now()
-    translog.debug('Event listeners setup complete', {
+    translog.debug('Capture events setup complete', {
       duration: endTime - startTime,
       timestamp: Date.now()
     })
 
     return () => {
-      translog.debug('Cleaning up event listeners', {
-        timestamp: Date.now()
-      })
-      keyboardCleanup()
       startCaptureCleanup()
       captureDataCleanup()
     }
-  }, []) // 空依赖数组,只在组件挂载时设置一次
+  }
 
   if (error) {
     return (
@@ -181,34 +226,6 @@ const updateMousePosition = performanceHelper.debounce((e: MouseEvent) => {
   }
 }, 16) // 约60fps
 
-// 处理键盘事件
-const handleKeyDown = (e: KeyboardEvent) => {
-  try {
-    debugHelper.startOperation('handleKeyDown')
-    debugHelper.logEvent(`Key pressed: ${e.key}`)
-    translog.debug('Key pressed:', e.key)
-
-    // 添加调试模式切换快捷键
-    if (e.key === 'F12') {
-      if (debugHelper.isEnabled) {
-        debugHelper.disable()
-      } else {
-        debugHelper.enable()
-      }
-    }
-  } catch (error) {
-    translog.error('Error handling keydown:', error)
-  } finally {
-    debugHelper.endOperation('handleKeyDown')
-  }
-}
-
-// 设置事件监听器
-document.addEventListener('mousemove', updateMousePosition)
-window.addEventListener('resize', updateSize)
-document.addEventListener('keydown', handleKeyDown)
-updateSize()
-
 // 只创建一次 React Root
 const root = document.getElementById('root')
 if (!root) {
@@ -217,12 +234,8 @@ if (!root) {
   translog.debug('Root element found, mounting CaptureWrapper component')
   debugHelper.logEvent('Mounting CaptureWrapper component')
   ReactDOM.createRoot(root as HTMLElement).render(
-    <React.StrictMode>
-      <ErrorBoundary>
-        <HashRouter>
-          <MemoizedCaptureWrapper />
-        </HashRouter>
-      </ErrorBoundary>
-    </React.StrictMode>
+    <HashRouter>
+      <MemoizedCaptureWrapper />
+    </HashRouter>
   )
 } 

@@ -149,7 +149,8 @@ export class CaptureManager {
    */
   private async setupCaptureWindow(display: Display): Promise<BrowserWindow> {
     const operation = async () => {
-      const win = new BrowserWindow({
+      // 基础窗口配置
+      const baseConfig: Electron.BrowserWindowConstructorOptions = {
         x: display.bounds.x,
         y: display.bounds.y,
         width: display.bounds.width,
@@ -163,7 +164,6 @@ export class CaptureManager {
         fullscreenable: false,
         hasShadow: false,
         enableLargerThanScreen: true,
-        type: 'panel',
         webPreferences: {
           preload: join(process.env.DIST_ELECTRON!, 'preload/index.js'),
           nodeIntegration: false,
@@ -173,56 +173,141 @@ export class CaptureManager {
         },
         backgroundColor: '#00000000',
         show: false,
-      });
+        type: 'panel'
+      }
 
-      // Platform specific settings
+      // macOS 特定配置
+      const darwinConfig: Partial<Electron.BrowserWindowConstructorOptions> = process.platform === 'darwin' 
+        ? {
+            titleBarStyle: 'hidden',
+            trafficLightPosition: { x: -100, y: -100 },
+            roundedCorners: false,
+            focusable: true,
+          }
+        : {}
+
+      const windowConfig = {
+        ...baseConfig,
+        ...darwinConfig
+      }
+
+      const win = new BrowserWindow(windowConfig)
+
+      // 设置平台特定行为
       if (process.platform === 'darwin') {
-        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-        win.setAlwaysOnTop(true, 'screen-saver', 1)
-      } else {
-        win.setAlwaysOnTop(true, 'pop-up-menu', 1)
+        this.setupDarwinWindowBehavior(win)
       }
 
       win.setIgnoreMouseEvents(false)
+      this.setupWindowEventListeners(win)
+      await this.setupWindowLoading(win)
 
-      // Load URL with timeout
-      const loadUrl = process.env.VITE_DEV_SERVER_URL
-        ? `${process.env.VITE_DEV_SERVER_URL}/src/renderer/captureWindow.html`
-        : `file://${join(process.env.DIST!, 'captureWindow.html')}`
+      return win
+    }
 
-      // 优化加载流程
-      let isLoaded = false
-      let isReady = false
+    return this.retryWithDelay(operation)
+  }
 
-      const loadPromise = new Promise<void>((resolve, reject) => {
-        win.webContents.on('did-finish-load', () => {
-          isLoaded = true
-          if (isReady) resolve()
-        })
+  /**
+   * 设置 macOS 特定的窗口行为
+   */
+  private setupDarwinWindowBehavior(win: BrowserWindow): void {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    win.setAlwaysOnTop(true, 'screen-saver', 1)
+    app.dock?.show()
+    app.focus({ steal: true })
+    win.setWindowButtonVisibility(false)
+  }
 
-        win.once('ready-to-show', () => {
-          isReady = true
-          if (isLoaded) resolve()
-        })
+  /**
+   * 设置窗口事件监听器
+   */
+  private setupWindowEventListeners(win: BrowserWindow): void {
+    // 监听失焦事件
+    win.on('blur', () => {
+      Logger.debug('Window lost focus, attempting to regain')
+      if (!win.isDestroyed()) {
+        if (process.platform === 'darwin') {
+          app.focus({ steal: true })
+          win.setAlwaysOnTop(true, 'screen-saver', 1)
+        }
+        win.focus()
+      }
+    })
 
-        win.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
-          reject(new Error(`Failed to load window: ${errorDescription} (${errorCode})`))
-        })
+    // 监听所有输入事件以保持焦点
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.type === 'keyDown' && !win.isFocused()) {
+        if (process.platform === 'darwin') {
+          app.focus({ steal: true })
+          win.setAlwaysOnTop(true, 'screen-saver', 1)
+        }
+        win.focus()
+      }
+    })
+
+    // 在显示窗口之前先激活它
+    win.once('ready-to-show', () => {
+      Logger.debug('Capture window ready to show')
+      if (process.platform === 'darwin') {
+        app.dock?.show()
+        app.focus({ steal: true })
+        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+        win.setAlwaysOnTop(true, 'screen-saver', 1)
+      }
+      win.show()
+      win.moveTop()
+      win.focus()
+    })
+
+    // 监听窗口关闭
+    win.on('closed', () => {
+      Logger.debug({
+        message: 'Capture window closed',
+        data: { timestamp: Date.now() }
+      })
+      mgrWindows.setCaptureWindow(null)
+    })
+  }
+
+  /**
+   * 设置窗口加载
+   */
+  private async setupWindowLoading(win: BrowserWindow): Promise<void> {
+    const loadUrl = process.env.VITE_DEV_SERVER_URL
+      ? `${process.env.VITE_DEV_SERVER_URL}/src/renderer/captureWindow.html`
+      : `file://${join(process.env.DIST!, 'captureWindow.html')}`
+
+    let isLoaded = false
+    let isReady = false
+
+    const loadPromise = new Promise<void>((resolve, reject) => {
+      win.webContents.on('did-finish-load', () => {
+        isLoaded = true
+        if (isReady) resolve()
       })
 
-      // 启动加载
-      win.loadURL(loadUrl)
+      win.once('ready-to-show', () => {
+        isReady = true
+        if (isLoaded) resolve()
+      })
 
-      // 等待加载完成
-      await Promise.race([
-        loadPromise,
-        this.createTimeout(this.URL_LOAD_TIMEOUT, 'Window loading')
-      ])
+      win.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
+        reject(new Error(`Failed to load window: ${errorDescription} (${errorCode})`))
+      })
+    })
 
-      return win;
-    };
+    win.loadURL(loadUrl)
 
-    return this.retryWithDelay(operation);
+    await Promise.race([
+      loadPromise,
+      this.createTimeout(this.URL_LOAD_TIMEOUT, 'Window loading')
+    ])
+
+    // 在开发模式下打开 DevTools
+    if (!app.isPackaged) {
+      win.webContents.openDevTools({ mode: 'detach' })
+    }
   }
 
   /**
