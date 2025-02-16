@@ -25,30 +25,22 @@ interface RenderConfig {
 export const canvasRenderHelper = {
   // 内部样式配置
   _cornerStyles: {
-    screenshot: {
-      colors: ['#1890ff', '#69c0ff'],
-      shadowColor: 'rgba(24, 144, 255, 0.3)',
-      centerDotColor: '#1890ff'
+    primary: {
+      screenshot: {
+        colors: ['#2563EB', '#3B82F6'],
+        shadowColor: 'rgba(37, 99, 235, 0.25)',
+        centerDotColor: '#2563EB'
+      },
+      recording: {
+        colors: ['#DC2626'],
+        shadowColor: 'rgba(220, 38, 38, 0.25)',
+        centerDotColor: '#DC2626'
+      }
     },
-    recording: {
-      colors: ['#ff4d4f'],
-      shadowColor: 'rgba(255, 77, 79, 0.3)',
-      centerDotColor: '#ff4d4f'
-    },
-    region: {
-      colors: ['#52c41a'],
-      shadowColor: 'rgba(82, 196, 26, 0.3)',
-      centerDotColor: '#52c41a'
-    },
-    magnifier: {
-      colors: ['#722ed1'],
-      shadowColor: 'rgba(114, 46, 209, 0.3)',
-      centerDotColor: '#722ed1'
-    },
-    colorPicker: {
-      colors: ['#ff4d4f', '#faad14', '#1890ff', '#722ed1'],
+    secondary: {
+      colors: ['#8c8c8c'],
       shadowColor: 'rgba(0, 0, 0, 0.2)',
-      centerDotColor: '#fff'
+      centerDotColor: '#8c8c8c'
     }
   },
 
@@ -134,119 +126,94 @@ export const canvasRenderHelper = {
   ) {
     const { x, y, width, height } = bounds
     const cornerSize = 12 * scale
-    const lineWidth = 2 * scale
+    const lineWidth = 1.5 * scale  // 减小基础线宽
 
     // 保存当前上下文状态
     ctx.save()
 
-    // 创建主外发光效果
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)'
-    ctx.shadowBlur = 8 * scale
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'
-    ctx.lineWidth = lineWidth + 4
-    ctx.strokeRect(x, y, width, height)
+    if (mode === CaptureMode.Screenshot || mode === CaptureMode.ScreenRecording) {
+      // 主要模式：现代化的边框效果
+      if (mode === CaptureMode.Screenshot) {
+        // 截图模式：清晰专业的边框
+        // 柔和的外发光效果
+        ctx.shadowColor = 'rgba(37, 99, 235, 0.15)'
+        ctx.shadowBlur = 6 * scale
+        ctx.strokeStyle = '#3B82F6'
+        ctx.lineWidth = lineWidth
+        ctx.strokeRect(x, y, width, height)
 
-    // 清除阴影以准备绘制其他元素
-    ctx.shadowColor = 'transparent'
-    ctx.shadowBlur = 0
+        // 内部渐变边框
+        ctx.shadowColor = 'transparent'
+        ctx.shadowBlur = 0
+        const gradient = ctx.createLinearGradient(x, y, x + width, y + height)
+        gradient.addColorStop(0, '#2563EB80')  // 半透明渐变
+        gradient.addColorStop(0.5, '#3B82F6')
+        gradient.addColorStop(1, '#2563EB80')
+        ctx.strokeStyle = gradient
+        ctx.lineWidth = lineWidth * 0.8  // 更细的内边框
+        ctx.strokeRect(x, y, width, height)
 
-    // 根据不同模式设置边框样式
-    switch (mode) {
-      case CaptureMode.Screenshot:
-        // 截图模式：渐变边框效果
-        const screenshotGradient = ctx.createLinearGradient(x, y, x + width, y + height)
-        screenshotGradient.addColorStop(0, '#1890ff')
-        screenshotGradient.addColorStop(0.5, '#69c0ff')
-        screenshotGradient.addColorStop(1, '#1890ff')
-        ctx.strokeStyle = screenshotGradient
+      } else {
+        // 录屏模式：动态录制效果
+        const pulseScale = (Math.sin(performance.now() / 800) + 1) / 2  // 降低动画速度
+
+        // 柔和的外发光效果
+        ctx.shadowColor = 'rgba(220, 38, 38, 0.2)'
+        ctx.shadowBlur = 8 * scale
+        ctx.strokeStyle = '#DC262680'  // 半透明主色
         ctx.lineWidth = lineWidth
         ctx.strokeRect(x, y, width, height)
-        break
-        
-      case CaptureMode.ScreenRecording:
-        // 录屏模式：动画脉冲效果
-        ctx.strokeStyle = '#ff4d4f'
-        ctx.lineWidth = lineWidth
-        ctx.setLineDash([8 * scale, 4 * scale])
-        const pulseScale = (Math.sin(performance.now() / 500) + 1) / 2 // 0 to 1 pulse
-        ctx.lineWidth = lineWidth * (1 + pulseScale * 0.5)
-        ctx.lineDashOffset = -performance.now() / 50
+
+        // 动态虚线边框
+        ctx.shadowColor = 'transparent'
+        ctx.shadowBlur = 0
+        ctx.strokeStyle = '#DC2626'
+        ctx.lineWidth = lineWidth * 0.8
+        const dashLength = 6 * scale  // 减小虚线长度
+        ctx.setLineDash([dashLength, dashLength])
+        ctx.lineDashOffset = -performance.now() / 100  // 降低动画速度
         ctx.strokeRect(x, y, width, height)
-        break
+
+        // 录制指示器动画 - 移到左上角并优化大小
+        const indicatorSize = 4 * scale  // 减小指示器大小
+        const padding = 6 * scale
         
-      case CaptureMode.RegionSelection:
-        // 区域选择模式：智能参考线
-        const guideColor = '#52c41a'
-        ctx.strokeStyle = guideColor
-        ctx.lineWidth = lineWidth
-        
-        // 主边框
-        ctx.setLineDash([6 * scale, 3 * scale])
-        ctx.strokeRect(x, y, width, height)
-        
-        // 智能参考线
+        // 绘制内圆
         ctx.beginPath()
-        ctx.setLineDash([4 * scale, 4 * scale])
-        ctx.strokeStyle = `${guideColor}88`
-        ctx.lineWidth = lineWidth / 2
-        
-        // 中心十字线
-        ctx.moveTo(0, y + height / 2)
-        ctx.lineTo(ctx.canvas.width, y + height / 2)
-        ctx.moveTo(x + width / 2, 0)
-        ctx.lineTo(x + width / 2, ctx.canvas.height)
-        
-        // 三分线
-        for (let i = 1; i < 3; i++) {
-          ctx.moveTo(x + (width * i) / 3, y)
-          ctx.lineTo(x + (width * i) / 3, y + height)
-          ctx.moveTo(x, y + (height * i) / 3)
-          ctx.lineTo(x + width, y + (height * i) / 3)
-        }
-        ctx.stroke()
-        break
-        
-      case CaptureMode.Magnifier:
-        // 放大镜模式：镜头效果
-        const lensGradient = ctx.createRadialGradient(
-          x + width / 2,
-          y + height / 2,
-          Math.min(width, height) / 4,
-          x + width / 2,
-          y + height / 2,
-          Math.min(width, height) / 2
+        ctx.arc(
+          x + padding + indicatorSize,
+          y + padding + indicatorSize,
+          indicatorSize * (0.6 + pulseScale * 0.2),  // 减小脉冲范围
+          0,
+          Math.PI * 2
         )
-        lensGradient.addColorStop(0, '#722ed188')
-        lensGradient.addColorStop(1, '#722ed1')
-        ctx.strokeStyle = lensGradient
-        ctx.lineWidth = lineWidth * 1.5
-        ctx.strokeRect(x, y, width, height)
+        ctx.fillStyle = '#DC2626'
+        ctx.fill()
         
-        // 添加镜头反光效果
+        // 绘制外圈光晕
         ctx.beginPath()
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'
-        ctx.lineWidth = lineWidth / 2
-        const angle = Math.PI / 4
-        ctx.arc(x + width / 2, y + height / 2, Math.min(width, height) / 3, angle, angle + Math.PI / 2)
+        ctx.arc(
+          x + padding + indicatorSize,
+          y + padding + indicatorSize,
+          indicatorSize * (1 + pulseScale * 0.3),
+          0,
+          Math.PI * 2
+        )
+        ctx.strokeStyle = '#DC262640'  // 更透明的光晕
+        ctx.lineWidth = scale * 0.5
         ctx.stroke()
-        break
-        
-      case CaptureMode.ColorPicker:
-        // 颜色选择器模式：彩虹渐变效果
-        const rainbowGradient = ctx.createLinearGradient(x, y, x + width, y)
-        rainbowGradient.addColorStop(0, '#ff4d4f')
-        rainbowGradient.addColorStop(0.2, '#faad14')
-        rainbowGradient.addColorStop(0.4, '#52c41a')
-        rainbowGradient.addColorStop(0.6, '#1890ff')
-        rainbowGradient.addColorStop(0.8, '#722ed1')
-        rainbowGradient.addColorStop(1, '#eb2f96')
-        ctx.strokeStyle = rainbowGradient
-        ctx.lineWidth = lineWidth
-        ctx.strokeRect(x, y, width, height)
-        break
+      }
+    } else {
+      // 次要模式：简洁的灰色边框
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.1)'
+      ctx.shadowBlur = 4 * scale
+      ctx.strokeStyle = '#8c8c8c80'  // 半透明灰色
+      ctx.lineWidth = lineWidth
+      ctx.setLineDash([4 * scale, 3 * scale])  // 减小虚线间距
+      ctx.strokeRect(x, y, width, height)
     }
 
-    // 绘制高级角点装饰
+    // 绘制角点装饰
     this.drawCornerDecorations(ctx, x, y, width, height, cornerSize, mode, scale)
 
     // 恢复上下文状态
@@ -276,88 +243,62 @@ export const canvasRenderHelper = {
       ctx.translate(corner.x, corner.y)
       ctx.rotate((Math.PI / 2) * index)
 
-      switch (mode) {
-        case CaptureMode.Screenshot: {
-          const style = this._cornerStyles.screenshot
-          const gradient = this._createCornerGradient(ctx, cornerSize, style.colors)
-          this._setShadowEffect(ctx, style.shadowColor, scale)
-          this._drawBaseCorner(ctx, cornerSize, scale, { strokeStyle: gradient })
-          this._drawCenterDot(ctx, scale, style.centerDotColor)
-          break
-        }
-
-        case CaptureMode.ScreenRecording: {
-          const style = this._cornerStyles.recording
-          const pulseScale = (Math.sin(performance.now() / 500) + 1) / 2
-          this._setShadowEffect(
-            ctx,
-            style.shadowColor,
-            scale,
-            4 * (1 + pulseScale * 0.5)
-          )
-          this._drawBaseCorner(ctx, cornerSize, scale, {
-            strokeStyle: style.colors[0],
-            lineWidth: 2 * scale * (1 + pulseScale * 0.3)
-          })
-          this._drawCenterDot(
-            ctx,
-            scale,
-            style.centerDotColor,
-            4,
-            undefined,
-            0.6 + pulseScale * 0.4
-          )
-          break
-        }
-
-        case CaptureMode.RegionSelection: {
-          const style = this._cornerStyles.region
-          this._setShadowEffect(ctx, style.shadowColor, scale)
+      if (mode === CaptureMode.Screenshot || mode === CaptureMode.ScreenRecording) {
+        if (mode === CaptureMode.Screenshot) {
+          // 截图模式：简洁现代的角点
+          const style = this._cornerStyles.primary.screenshot
+          this._setShadowEffect(ctx, style.shadowColor, scale, 4)
           
-          // 绘制手柄形状
+          // 更细腻的L形角点
           ctx.beginPath()
           ctx.moveTo(-cornerSize / 2, 0)
-          ctx.lineTo(-cornerSize / 4, 0)
-          ctx.moveTo(0, -cornerSize / 2)
-          ctx.lineTo(0, -cornerSize / 4)
-          ctx.strokeStyle = style.colors[0]
-          ctx.lineWidth = 3 * scale
+          ctx.lineTo(0, 0)
+          ctx.lineTo(0, -cornerSize / 2)
+          const gradient = this._createCornerGradient(ctx, cornerSize, style.colors)
+          ctx.strokeStyle = gradient
+          ctx.lineWidth = 1.5 * scale  // 更细的线条
           ctx.stroke()
           
-          this._drawCenterDot(ctx, scale, style.centerDotColor)
-          break
-        }
-
-        case CaptureMode.Magnifier: {
-          const style = this._cornerStyles.magnifier
-          this._setShadowEffect(ctx, style.shadowColor, scale)
+          // 更小的装饰点
+          this._drawCenterDot(ctx, scale, style.centerDotColor, 1.5)
           
-          // 绘制镜头光圈形状
+        } else {
+          // 录屏模式：动态角点效果
+          const style = this._cornerStyles.primary.recording
+          const pulseScale = (Math.sin(performance.now() / 800) + 1) / 2
+          
+          // 柔和的外发光
+          this._setShadowEffect(ctx, style.shadowColor, scale, 6 * (1 + pulseScale * 0.2))
+          
+          // 动态L形角点
           ctx.beginPath()
-          const radius = cornerSize / 3
-          for (let i = 0; i < 8; i++) {
-            const angle = (i * Math.PI) / 4
-            const startX = Math.cos(angle) * radius
-            const startY = Math.sin(angle) * radius
-            ctx.moveTo(0, 0)
-            ctx.lineTo(startX, startY)
-          }
-          ctx.strokeStyle = style.colors[0]
-          ctx.lineWidth = 1.5 * scale
+          ctx.moveTo(-cornerSize / 2, 0)
+          ctx.lineTo(0, 0)
+          ctx.lineTo(0, -cornerSize / 2)
+          ctx.strokeStyle = `${style.colors[0]}CC`  // 稍微透明
+          ctx.lineWidth = 1.5 * scale * (1 + pulseScale * 0.15)  // 减小动画幅度
           ctx.stroke()
           
-          this._drawCenterDot(ctx, scale, style.centerDotColor, 2)
-          break
+          // 更小的动态圆点
+          const dotScale = 1 + pulseScale * 0.2
+          this._drawCenterDot(ctx, scale * dotScale, style.centerDotColor, 2)
+          
+          // 更柔和的光环
+          ctx.beginPath()
+          ctx.arc(0, 0, 3 * scale * (1 + pulseScale * 0.15), 0, Math.PI * 2)
+          ctx.strokeStyle = `${style.colors[0]}20`  // 更透明的光环
+          ctx.lineWidth = scale * 0.5
+          ctx.stroke()
         }
-
-        case CaptureMode.ColorPicker: {
-          const style = this._cornerStyles.colorPicker
-          const gradient = this._createCornerGradient(ctx, cornerSize, style.colors, true)
-          this._setShadowEffect(ctx, style.shadowColor, scale)
-          this._drawBaseCorner(ctx, cornerSize, scale, { strokeStyle: gradient })
-          this._drawCenterDot(ctx, scale, style.centerDotColor, 3, gradient)
-          break
-        }
+      } else {
+        // 次要模式：更简单的角点
+        const style = this._cornerStyles.secondary
+        this._setShadowEffect(ctx, style.shadowColor, scale, 3)
+        this._drawBaseCorner(ctx, cornerSize, scale, { 
+          strokeStyle: `${style.colors[0]}99`,  // 更透明
+          lineWidth: 1.5 * scale 
+        })
+        this._drawCenterDot(ctx, scale, style.centerDotColor, 1.5)
       }
 
       ctx.restore()
@@ -430,9 +371,11 @@ export const canvasRenderHelper = {
       ctx.fillStyle = 'rgba(0, 0, 0, 1)'
       ctx.fillRect(physicalBounds.x, physicalBounds.y, physicalBounds.width, physicalBounds.height)
       
-      // 恢复原图
+      // 恢复正常绘制模式
       ctx.globalCompositeOperation = 'source-over'
-      if (initialCanvasState) {
+
+      // 只在截图模式下重绘原始内容
+      if (mode === CaptureMode.Screenshot && initialCanvasState) {
         ctx.putImageData(
           initialCanvasState,
           0,
@@ -444,13 +387,8 @@ export const canvasRenderHelper = {
         )
       }
       
-      // 绘制选区边框
-      ctx.strokeStyle = '#1a73e8'
-      ctx.lineWidth = 2
-      ctx.strokeRect(physicalBounds.x, physicalBounds.y, physicalBounds.width, physicalBounds.height)
-      
-      // 绘制选区尺寸标签
-      this.drawSizeLabel(ctx, physicalBounds)
+      // 使用新的边框绘制方法
+      this.drawSelectionBorder(ctx, physicalBounds, scale, mode)
     }
 
     setCanvasInfo({
