@@ -97,24 +97,52 @@
         pointer-events: auto !important;
       }
     </style>
-  </head>
-  <body>
-    <div id="root"></div>
     <script>
-      // 添加错误处理
+      console.debug('[CaptureWindow] Document loading started',JSON.stringify({
+        timestamp: Date.now(),
+        url: window.location.href
+      }));
+
+      // 监听 DOMContentLoaded 事件
+      document.addEventListener('DOMContentLoaded', () => {
+        console.debug('[CaptureWindow] DOMContentLoaded fired',JSON.stringify({
+          timestamp: Date.now(),
+          readyState: document.readyState
+        }));
+      });
+
+      // 监听 load 事件
+      window.addEventListener('load', () => {
+        console.debug('[CaptureWindow] Window load completed',JSON.stringify({
+          timestamp: Date.now(),
+          readyState: document.readyState
+        }));
+      });
+
+      // 监听错误
       window.addEventListener('error', (event) => {
-        console.error('Global error:', event.error)
-      })
+        console.error('[CaptureWindow] Error occurred:',JSON.stringify({
+          error: event.error,
+          message: event.message,
+          timestamp: Date.now()
+        }));
+      });
 
       window.addEventListener('unhandledrejection', (event) => {
-        console.error('Unhandled promise rejection:', event.reason)
-      })
+        console.error('[CaptureWindow] Unhandled promise rejection:',JSON.stringify({
+          reason: event.reason,
+          timestamp: Date.now()
+        }));
+      });
 
       // 禁用默认的右键菜单
       window.addEventListener('contextmenu', (e) => {
-        e.preventDefault()
-      })
+        e.preventDefault();
+      });
     </script>
+  </head>
+  <body>
+    <div id="root"></div>
     <script type="module" src="/src/renderer/captureWindow.tsx"></script>
   </body>
 </html> 

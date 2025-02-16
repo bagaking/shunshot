@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { LogLevel } from '../../src/types/translog'
+import { LogLevel } from '../types/translog'
 import { Logger } from './logger'
 
 // 初始化日志系统

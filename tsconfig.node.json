@@ -8,8 +8,9 @@
   },
   "include": [
     "vite.config.ts",
-    "electron",
-    "src/renderer/types",
-    "src/types"
+    "src/types",
+    "src/common",
+    "src/preload",
+    "src/main"
   ]
 } 

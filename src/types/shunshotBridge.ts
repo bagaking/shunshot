@@ -1,5 +1,5 @@
 import { IpcMain, IpcRenderer } from 'electron'
-import { Bridge, IBridgeOptions } from './bridge'
+import { Bridge, IBridgeOptions } from '../common/bridge'
 import { IShunshotCoreAPI } from './electron'
 
 export const SHUNSHOT_BRIDGE_PREFIX = "shunshot"

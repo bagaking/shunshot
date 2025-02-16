@@ -49,24 +49,52 @@
         -webkit-app-region: no-drag;
       }
     </style>
-  </head>
-  <body>
-    <div id="root"></div>
     <script>
-      // 添加错误处理
+      console.debug('[MainWindow] Document loading started',JSON.stringify({
+        timestamp: Date.now(),
+        url: window.location.href
+      }));
+
+      // 监听 DOMContentLoaded 事件
+      document.addEventListener('DOMContentLoaded', () => {
+        console.debug('[MainWindow] DOMContentLoaded fired',JSON.stringify({
+          timestamp: Date.now(),
+          readyState: document.readyState
+        }));
+      });
+
+      // 监听 load 事件
+      window.addEventListener('load', () => {
+        console.debug('[MainWindow] Window load completed',JSON.stringify({
+          timestamp: Date.now(),
+          readyState: document.readyState
+        }));
+      });
+
+      // 监听错误
       window.addEventListener('error', (event) => {
-        console.error('Global error:', event.error)
-      })
+        console.error('[MainWindow] Error occurred:',JSON.stringify({
+          error: event.error,
+          message: event.message,
+          timestamp: Date.now()
+        }));
+      });
 
       window.addEventListener('unhandledrejection', (event) => {
-        console.error('Unhandled promise rejection:', event.reason)
-      })
+        console.error('[MainWindow] Unhandled promise rejection:',JSON.stringify({
+          reason: event.reason,
+          timestamp: Date.now()
+        }));
+      });
 
       // 禁用默认的右键菜单
       window.addEventListener('contextmenu', (e) => {
         e.preventDefault()
       })
     </script>
-    <script type="module" src="/src/renderer/mainWindow.tsx"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./mainWindow.tsx"></script>
   </body>
 </html> 

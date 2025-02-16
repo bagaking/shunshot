@@ -40,11 +40,13 @@ export class WindowManager {
    */
   async createMainWindow() {
     Logger.log('Creating main window...')
+    const preloadPath = join(process.env.DIST_PRELOAD!, 'index.js')
+    Logger.log(`preloadPath: ${preloadPath}`)
     const mainWindow = new BrowserWindow({
       width: 200,
       height: 272,
       webPreferences: {
-        preload: join(process.env.DIST_ELECTRON!, 'preload/index.js'),
+        preload: preloadPath,
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
@@ -71,7 +73,7 @@ export class WindowManager {
         mainWindow.webContents.openDevTools({ mode: 'detach' })
       }
     } else {
-      const filePath = join(process.env.DIST!, 'mainWindow.html')
+      const filePath = join(process.env.DIST_RENDERER!, 'mainWindow.html')
       Logger.log(`Loading file: ${filePath}`)
       await mainWindow.loadFile(filePath)
     }
@@ -104,12 +106,14 @@ export class WindowManager {
       return this.settingsWindow
     }
 
+    const preloadPath = join(process.env.DIST_PRELOAD!, 'index.js')
+    Logger.log(`preloadPath: ${preloadPath}`)
     const settingsWindow = new BrowserWindow({
       width: 800,
       height: 600,
       title: '设置',
       webPreferences: {
-        preload: join(process.env.DIST_ELECTRON!, 'preload/index.js'),
+        preload: preloadPath,
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
@@ -136,7 +140,7 @@ export class WindowManager {
         settingsWindow.webContents.openDevTools({ mode: 'detach' })
       }
     } else {
-      const filePath = join(process.env.DIST!, 'settingsWindow.html')
+      const filePath = join(process.env.DIST_RENDERER!, 'settingsWindow.html')
       Logger.log(`Loading file: ${filePath}`)
       await settingsWindow.loadFile(filePath)
     }

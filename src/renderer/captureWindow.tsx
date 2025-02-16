@@ -20,6 +20,38 @@ debugHelper.setOptions({
   enablePerformanceMonitoring: true
 })
 
+// 更新窗口尺寸信息
+const updateSize = performanceHelper.debounce(() => {
+  try {
+    debugHelper.startOperation('updateSize')
+    const sizeSpan = document.getElementById('size')
+    if (sizeSpan) {
+      sizeSpan.textContent = `${window.innerWidth} x ${window.innerHeight}`
+    }
+  } catch (error) {
+    console.error('Error updating size:', error)
+  } finally {
+    debugHelper.endOperation('updateSize')
+  }
+}, 100)
+
+// 更新鼠标位置信息
+function handleMousePositionUpdate(e: MouseEvent) {
+  try {
+    debugHelper.startOperation('updateMousePosition')
+    const mouseSpan = document.getElementById('mouse')
+    if (mouseSpan) {
+      mouseSpan.textContent = `${e.clientX}, ${e.clientY}`
+    }
+  } catch (error) {
+    console.error('Error updating mouse position:', error)
+  } finally {
+    debugHelper.endOperation('updateMousePosition')
+  }
+}
+
+const updateMousePosition = performanceHelper.debounce(handleMousePositionUpdate, 16) // 约60fps
+
 // 创建一个包装组件来管理状态
 const CaptureWrapper: React.FC = () => {
   const [captureData, setCaptureData] = useState<CaptureData | null>(null)
@@ -30,10 +62,11 @@ const CaptureWrapper: React.FC = () => {
   // 焦点管理
   useEffect(() => {
     const logWindowState = (context: string) => {
+      const api = window.shunshotCoreAPI
       translog.debug(`${context}:`, {
         hasFocus: document.hasFocus(),
         activeElement: document.activeElement?.tagName,
-        platform: window.shunshotCoreAPI.platform,
+        platform: api?.platform || process.platform,
         windowState: {
           innerWidth: window.innerWidth,
           innerHeight: window.innerHeight,
@@ -195,36 +228,6 @@ const CaptureWrapper: React.FC = () => {
 
 // 使用 React.memo 优化组件
 const MemoizedCaptureWrapper = React.memo(CaptureWrapper)
-
-// 更新窗口尺寸信息
-const updateSize = performanceHelper.debounce(() => {
-  try {
-    debugHelper.startOperation('updateSize')
-    const sizeSpan = document.getElementById('size')
-    if (sizeSpan) {
-      sizeSpan.textContent = `${window.innerWidth} x ${window.innerHeight}`
-    }
-  } catch (error) {
-    console.error('Error updating size:', error)
-  } finally {
-    debugHelper.endOperation('updateSize')
-  }
-}, 100)
-
-// 更新鼠标位置信息
-const updateMousePosition = performanceHelper.debounce((e: MouseEvent) => {
-  try {
-    debugHelper.startOperation('updateMousePosition')
-    const mouseSpan = document.getElementById('mouse')
-    if (mouseSpan) {
-      mouseSpan.textContent = `${e.clientX}, ${e.clientY}`
-    }
-  } catch (error) {
-    console.error('Error updating mouse position:', error)
-  } finally {
-    debugHelper.endOperation('updateMousePosition')
-  }
-}, 16) // 约60fps
 
 // 只创建一次 React Root
 const root = document.getElementById('root')

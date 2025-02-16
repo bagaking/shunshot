@@ -1,15 +1,14 @@
 import { app, ipcMain } from 'electron'
 import { join } from 'path'
 import { Logger } from './logger'
-import { ShunshotCoreBridge } from '../../src/types/shunshotBridge'
-import { IShunshotCoreAPI } from '../../src/types/electron'
+import { ShunshotCoreBridge } from '../types/shunshotBridge'
+import { IShunshotCoreAPI } from '../types/electron'
 import { handlers } from './handlers'
 import { mgrWindows } from './mgrWindows'
 import { mgrShortcut } from './shortcut'
 import { mgrTray } from './trayMenu'
 import { mgrPreference } from './mgrPreference'
-import { initTransLog } from './translog'
-import { BrowserWindow } from 'electron'
+import { initTransLog } from './translog' 
 
 // The built directory structure
 //
@@ -21,15 +20,19 @@ import { BrowserWindow } from 'electron'
 // ├─┬ dist
 // │ └── index.html    > Electron-Renderer
 //
-process.env.DIST_ELECTRON = join(__dirname, '..')
-process.env.DIST = join(process.env.DIST_ELECTRON, '../renderer')
+process.env.DIST_MAIN = __dirname
+process.env.DIST = join(__dirname, '..')
+process.env.DIST_PRELOAD = join(process.env.DIST, 'preload')
+process.env.DIST_RENDERER = join(process.env.DIST, 'src/renderer')
 process.env.VITE_PUBLIC = process.env.VITE_DEV_SERVER_URL
-  ? join(process.env.DIST_ELECTRON, '../public')
+  ? join(process.env.DIST_MAIN, '../public')
   : process.env.DIST
 
 Logger.log('Environment variables: ' + JSON.stringify({
-  DIST_ELECTRON: process.env.DIST_ELECTRON,
   DIST: process.env.DIST,
+  DIST_MAIN: process.env.DIST_MAIN,
+  DIST_PRELOAD: process.env.DIST_PRELOAD,
+  DIST_RENDERER: process.env.DIST_RENDERER,
   VITE_PUBLIC: process.env.VITE_PUBLIC,
   VITE_DEV_SERVER_URL: process.env.VITE_DEV_SERVER_URL,
 }))
@@ -41,13 +44,15 @@ if (process.platform === 'win32') {
 
 // 安装调试工具
 if (!app.isPackaged) {
-  app.whenReady().then(() => {
-    Logger.log('Installing dev tools...')
-    import('electron-devtools-installer').then(({ default: installExtension, REACT_DEVELOPER_TOOLS }) => {
-      installExtension(REACT_DEVELOPER_TOOLS)
-        .then((name) => Logger.log(`Added Extension: ${JSON.stringify(name)}`))
-        .catch((err) => Logger.error('Failed to install extension', err as Error))
-    })
+  app.whenReady().then(async () => {
+    try {
+      Logger.log('Installing dev tools...')
+      const { default: installExtension, REACT_DEVELOPER_TOOLS } = await import('electron-devtools-installer')
+      await installExtension(REACT_DEVELOPER_TOOLS)
+      Logger.log('React DevTools installed successfully')
+    } catch (err) {
+      Logger.error('Failed to install extension', err instanceof Error ? err : new Error(String(err)))
+    }
   })
 }
 

@@ -6,8 +6,8 @@ import { mgrClipboard } from './mgrClipboard'
 import { mgrOCR } from './mgrOCR'
 import { mgrPreference } from './mgrPreference'
 import { mgrShortcut } from './shortcut'
-import { IShunshotCoreAPI } from '../../src/types/electron'
-import { CaptureBounds } from '../../src/renderer/types/capture'
+import { IShunshotCoreAPI } from '../types/electron'
+import { CaptureBounds } from '../renderer/types/capture'
 
 /**
  * 主进程处理器

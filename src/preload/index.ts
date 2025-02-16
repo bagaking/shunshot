@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { SHUNSHOT_BRIDGE_PREFIX } from '../../src/types/shunshotBridge'
-import { IShunshotCoreAPI } from '../../src/types/electron'
-import { ITransLogAPI } from '../../src/types/translog'
+import { SHUNSHOT_BRIDGE_PREFIX } from '../types/shunshotBridge'
+import { IShunshotCoreAPI } from '../types/electron'
+import { ITransLogAPI } from '../types/translog'
 
 // 创建安全的IPC包装器
 const createSecureIPC = () => {
