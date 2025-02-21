@@ -83,22 +83,37 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [])
 
-  // 优化：使用 useCallback 缓存事件处理函数
+  // 处理@提及和消息发送
   const handleSend = useCallback(async (e?: React.KeyboardEvent) => {
     try {
       if (e) {
         preventEventBubbling(e)
       }
       
-      const { input, selectedAgent: targetAgentId } = chatState
+      const { input } = chatState
       if (!input.trim() || !onSend) return
 
       // 解析@提及
       const mentionMatch = input.match(/@(\w+)/)
-      const finalTargetAgentId = mentionMatch ? mentionMatch[1] : targetAgentId
+      let targetAgentId = agent?.id
+      let finalMessage = input.trim()
 
-      await onSend(input.trim(), finalTargetAgentId)
+      if (mentionMatch) {
+        const mentionedAgentId = mentionMatch[1]
+        const mentionedAgent = availableAgents.find(a => a.id === mentionedAgentId)
+        
+        if (mentionedAgent) {
+          targetAgentId = mentionedAgent.id
+          // 移除@提及部分
+          finalMessage = input.replace(/@\w+\s*/, '').trim()
+        }
+      }
+
+      if (!finalMessage) return
+
+      await onSend(finalMessage, targetAgentId)
       setChatState(prev => ({ ...prev, input: '', error: undefined }))
+      
     } catch (error) {
       console.error('[ChatPanel] Failed to send message:', error)
       setChatState(prev => ({ 
@@ -107,7 +122,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       }))
       message.error('发送消息失败')
     }
-  }, [chatState, onSend, preventEventBubbling])
+  }, [chatState, onSend, preventEventBubbling, agent, availableAgents])
 
   const handleCopy = useCallback(async (content: string) => {
     try {
@@ -133,7 +148,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   // 优化：使用 useMemo 缓存 agent 选项
   const agentOptions = useMemo(() => availableAgents.map(agent => ({
     value: agent.id,
-    label: agent.name,
+    label: `${agent.icon} ${agent.name}`,
     key: agent.id
   })), [availableAgents])
 
@@ -155,20 +170,25 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       {/* 消息列表区域 */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4"
-        style={{ minHeight: 0 }} // 确保 flex-1 正常工作
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+        style={{ minHeight: 0 }}
       >
         <AnimatePresence mode="popLayout">
-          <List
-            dataSource={messages}
-            renderItem={(msg) => (
+          {messages.map((msg, index) => (
+            <motion.div
+              key={`${msg.timestamp}-${index}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+            >
               <MessageItem
                 msg={msg}
                 agent={agent}
                 onCopy={handleCopy}
               />
-            )}
-          />
+            </motion.div>
+          ))}
         </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
@@ -189,7 +209,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               value={chatState.input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="输入消息继续对话... 使用 @ 切换 Agent"
+              placeholder={`输入消息继续对话... 使用 @ 切换 Agent${loading ? ' (处理中...)' : ''}`}
               disabled={loading}
               autoSize={{ minRows: 1, maxRows: 4 }}
               className="flex-1"
@@ -197,12 +217,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               onClick={preventEventBubbling}
               onFocus={preventEventBubbling}
               onBlur={preventEventBubbling}
+              prefix="@"
+              split=" "
             />
             <Button
               type="primary"
               onClick={() => handleSend()}
-              icon={<SendOutlined />}
-              loading={loading}
+              icon={loading ? <LoadingOutlined /> : <SendOutlined />}
+              disabled={loading || !chatState.input.trim()}
             >
               发送
             </Button>

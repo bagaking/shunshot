@@ -1,10 +1,11 @@
 import OpenAI from 'openai'
+import crypto from 'crypto'
 import { AgentConfig, AgentResult, AgentRunOptions, DEFAULT_AGENTS, Conversation, AgentMessage } from '../types/agents'
 import { mgrPreference } from './mgrPreference'
-import { Logger } from './logger'
-import { mgrCapture } from './mgrCapture'
+import { Logger } from './logger' 
 import { image } from '../common/2d'
 import { omit } from 'lodash'
+import { NativeImage } from 'electron'
 
 interface ModelConfig {
   apiKey: string
@@ -166,11 +167,12 @@ export class AgentsManager {
     }
   }
 
-  async runAgent(id: string, options: AgentRunOptions): Promise<AgentResult> {
-    try {
+  async runAgent(id: string, croppedImage: NativeImage, options: AgentRunOptions): Promise<AgentResult> {
+    try { 
       const agent = this.agents.get(id)
       if (!agent) {
-        throw new Error(`Agent not found: ${id}`)
+        Logger.warn(`Agent not found: ${id}`)
+        throw new Error('Agent not found')
       }
 
       if (!agent.enabled) {
@@ -192,31 +194,6 @@ export class AgentsManager {
         throw new Error(`Model name not configured for: ${agent.modelConfig.id}`)
       }
 
-      // 获取当前捕获数据
-      const currentData = mgrCapture.getCurrentData()
-      if (!currentData) {
-        throw new Error('No capture data available')
-      }
-
-      if (!currentData.fullImage) {
-        throw new Error('No image data available')
-      }
-
-      // 验证选择区域
-      if (!options.selectedBounds || 
-          options.selectedBounds.width <= 0 || 
-          options.selectedBounds.height <= 0) {
-        throw new Error('Invalid selection bounds')
-      }
-
-      // 裁剪图像
-      Logger.debug(`Cropping image with bounds: ${JSON.stringify(options.selectedBounds)}`)
-      const croppedImage = image.cropFromDisplay(
-        currentData.fullImage,
-        options.selectedBounds,
-        currentData.bounds
-      )
-
       if (!croppedImage) {
         throw new Error('Failed to crop image')
       }
@@ -226,10 +203,10 @@ export class AgentsManager {
         throw new Error('Cropped image is too small')
       }
 
-      // 转换为 base64
-      const imageData = croppedImage.toDataURL()
+      // 转换为 base64 
+      const base64Image = croppedImage.toDataURL().replace(/^data:image\/\w+;base64,/, '')
       
-      Logger.debug(`Running agent ${id} with model ${modelConfig.modelName}`)
+      Logger.debug(`Running agent ${id} with model ${agent.modelConfig.name}`)
       agent.parameters = agent.parameters || {}
       const otherParams = omit(agent.parameters, 'messages')
 
@@ -251,23 +228,27 @@ export class AgentsManager {
         conversation.messages.push({
           role: 'system',
           content: agent.systemPrompt,
-          timestamp: Date.now()
         })
+          // Add user message with image
+        const userMessage: AgentMessage = {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`,
+              },
+            },
+            { 
+              type: 'text', 
+              text: '这张图片说了啥' 
+            },
+          ],
+        }
+        conversation.messages.push(userMessage)
       }
 
-      // Add user message with image
-      const userMessage: AgentMessage = {
-        role: 'user',
-        content: JSON.stringify([
-          { type: 'text', text: '请分析这张图片' },
-          {
-            type: 'image_url',
-            image_url: { url: imageData }
-          }
-        ]),
-        timestamp: Date.now()
-      }
-      conversation.messages.push(userMessage)
+    
 
       // Add any additional messages from parameters
       if (options.parameters?.messages) {
@@ -279,11 +260,34 @@ export class AgentsManager {
         )
       }
 
+      Logger.debug(`Conversation messages: ${JSON.stringify(conversation.messages)}`)
+
+      // Format messages for OpenAI API
+      const formattedMessages = conversation.messages.map(msg => {
+        // Ensure role is one of: 'system' | 'user' | 'assistant'
+        const role = msg.role as 'system' | 'user' | 'assistant'
+        
+        // Handle array content (for images etc)
+        if (Array.isArray(msg.content)) {
+          return {
+            role,
+            content: msg.content as any // Type assertion needed for OpenAI API
+          }
+        }
+        
+        // Handle string content
+        return {
+          role,
+          content: msg.content
+        }
+      })
+
       // Call OpenAI
       const response = await openai.chat.completions.create({
         model: modelConfig.modelName,
-        messages: conversation.messages.map(({ role, content }) => ({ role, content })),
-        ...otherParams
+        messages: formattedMessages as any, // Type assertion needed for OpenAI API
+        max_tokens: otherParams.maxTokens || 4096,
+        temperature: otherParams.temperature || 0,
       })
 
       // Add assistant response

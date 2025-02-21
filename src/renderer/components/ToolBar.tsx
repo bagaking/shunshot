@@ -159,11 +159,12 @@ export const ToolBar: React.FC<ToolBarProps> = ({
           agent: selectedAgent,
           availableAgents: agentList,
           loading: true,
-          onSend: async (message: string) => {
+          onSend: async (message: string, targetAgentId?: string) => {
             const panel = panelManager.getPanelState(panelId)
             if (!panel) return
 
             try {
+              // Update loading state
               panelManager.updatePanel(panelId, {
                 contentProps: {
                   ...panel.contentProps,
@@ -171,35 +172,59 @@ export const ToolBar: React.FC<ToolBarProps> = ({
                 }
               })
 
-              // Run agent with conversation context
-              const result = await window.shunshotCoreAPI.runAgent(agentId, {
-                selectedBounds,
-                conversationId: panel.contentProps.conversationId,
-                parameters: {
-                  messages: [{
-                    role: 'user',
-                    content: message,
-                    timestamp: Date.now()
-                  }]
-                }
-              })
+              // Add user message immediately
+              const userMessage: AgentMessage = {
+                role: 'user',
+                content: [{ 
+                  type: 'text',
+                  text: message 
+                }],
+                timestamp: Date.now()
+              }
 
-              // Update panel with full conversation
               panelManager.updatePanel(panelId, {
                 contentProps: {
                   ...panel.contentProps,
-                  conversationId: result.conversation.id,
-                  messages: result.conversation.messages.map(m => ({
-                    type: m.role === 'user' ? 'user' : m.role === 'assistant' ? 'agent' : 'system',
-                    content: m.content,
-                    error: m.error,
-                    timestamp: m.timestamp
-                  })),
-                  loading: false
+                  messages: [...(panel.contentProps.messages || []), userMessage]
                 }
               })
+
+              // Run agent with conversation context
+              const result = await window.shunshotCoreAPI.runAgent(
+                targetAgentId || agentId,
+                {
+                  selectedBounds,
+                  conversationId: panel.contentProps.conversationId,
+                  parameters: {
+                    messages: [userMessage]
+                  }
+                }
+              )
+
+              // Update panel with full conversation
+              if (result.conversation) {
+                panelManager.updatePanel(panelId, {
+                  contentProps: {
+                    ...panel.contentProps,
+                    conversationId: result.conversation.id,
+                    messages: result.conversation.messages,
+                    loading: false,
+                    // If agent was switched, update the agent info
+                    ...(targetAgentId && targetAgentId !== agentId ? {
+                      agent: agentList.find(a => a.id === targetAgentId),
+                      title: agentList.find(a => a.id === targetAgentId)?.name || 'Chat'
+                    } : {})
+                  }
+                })
+              }
+
+              if (result.error) {
+                antdMessage.error(result.error)
+              }
+
             } catch (error) {
               translog.error('Failed to process message', error)
+              antdMessage.error('消息处理失败')
               panelManager.updatePanel(panelId, {
                 contentProps: {
                   ...panel.contentProps,
@@ -213,24 +238,27 @@ export const ToolBar: React.FC<ToolBarProps> = ({
 
       // Initial agent run to start conversation
       const result = await window.shunshotCoreAPI.runAgent(agentId, {
-        selectedBounds
+        selectedBounds,
+        parameters: {} // Remove initial message since it's handled by mgrAgents
       })
 
-      panelManager.updatePanel(panelId, {
-        contentProps: {
-          messages: result.conversation.messages.map(m => ({
-            type: m.role === 'user' ? 'user' : m.role === 'assistant' ? 'agent' : 'system',
-            content: m.content,
-            error: m.error,
-            timestamp: m.timestamp
-          })),
-          title: selectedAgent.name,
-          agent: selectedAgent,
-          availableAgents: agentList,
-          conversationId: result.conversation.id,
-          loading: false
-        }
-      })
+      // Update panel with conversation
+      if (result.conversation) {
+        panelManager.updatePanel(panelId, {
+          contentProps: {
+            messages: result.conversation.messages,
+            title: selectedAgent.name,
+            agent: selectedAgent,
+            availableAgents: agentList,
+            conversationId: result.conversation.id,
+            loading: false
+          }
+        })
+      }
+
+      if (result.error) {
+        antdMessage.error(result.error)
+      }
 
     } catch (error) {
       translog.error('Failed to handle agent selection', error)

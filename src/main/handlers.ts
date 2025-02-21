@@ -1,4 +1,4 @@
-import { screen } from 'electron'
+import { NativeImage, screen } from 'electron'
 import { Logger } from './logger'
 import { mgrWindows } from './mgrWindows'
 import { mgrCapture } from './mgrCapture'
@@ -10,6 +10,57 @@ import { IShunshotCoreAPI } from '../types/shunshotapi'
 import { Bounds } from '../common/2d'
 import { image } from '../common/2d'
 import { mgrAgents } from './mgrAgents'
+import { AgentResult, AgentRunOptions } from '../types/agents'
+
+function MakeImage(bounds: Bounds): NativeImage | { error: string } {
+  const currentData = mgrCapture.getCurrentData()
+  if (!currentData) {
+    Logger.error('No capture data available')
+    return { error: 'No capture data available' }
+  }
+
+  if (!currentData.fullImage) {
+    Logger.error('No image data available')
+    return { error: 'No image data available' }
+  }
+
+  try {
+    // Log input validation
+    Logger.debug({
+      message: '[MkImg] Input validation',
+      data: {
+        hasFullImage: !!currentData.fullImage,
+        fullImageSize: currentData.fullImage.getSize(),
+        displaySpaceBounds: bounds,
+        captureSpaceBounds: currentData.bounds
+      }
+    })
+
+    // 使用新的图像处理模块裁剪图像
+    const croppedImage = image.cropFromDisplay(
+      currentData.fullImage,
+      bounds,
+      currentData.bounds
+    )
+
+    if (!croppedImage) {
+      Logger.error('Failed to crop image')
+      return { error: 'Failed to crop image' }
+    }
+
+    // 验证图像尺寸
+    if (!image.meetsMinimumSize(croppedImage)) {
+      const size = croppedImage.getSize()
+      return { 
+        error: `Image dimensions are too small. Minimum allowed dimension: 10 pixels. Current dimensions: width = ${size.width}, height = ${size.height}` 
+      }
+    }
+    return croppedImage
+  } catch (error) {
+    Logger.error('Failed to make image', error as Error)
+    return { error: 'Failed to make image' }
+  }
+}
 
 /**
  * 主进程处理器
@@ -239,53 +290,22 @@ export const handlers: IShunshotCoreAPI = {
     Logger.log(`Loading plugin: ${pluginId}`)
   },
 
+
+
+
   // OCR 相关
   requestOCR: async (bounds: Bounds) => {
     Logger.log('Received OCR request')
-    
-    const currentData = mgrCapture.getCurrentData()
-    if (!currentData) {
-      Logger.error('No capture data available')
-      return { error: 'No capture data available' }
-    }
-
-    if (!currentData.fullImage) {
-      Logger.error('No image data available')
-      return { error: 'No image data available' }
-    }
-
     try {
-      // Log input validation
-      Logger.debug({
-        message: '[OCR Debug] Input validation',
-        data: {
-          hasFullImage: !!currentData.fullImage,
-          fullImageSize: currentData.fullImage.getSize(),
-          displaySpaceBounds: bounds,
-          captureSpaceBounds: currentData.bounds
-        }
-      })
-
-      // 使用新的图像处理模块裁剪图像
-      const croppedImage = image.cropFromDisplay(
-        currentData.fullImage,
-        bounds,
-        currentData.bounds
-      )
-
+      const croppedImage = MakeImage(bounds) 
       if (!croppedImage) {
-        Logger.error('Failed to crop image')
-        return { error: 'Failed to crop image' }
+        Logger.error({message: 'Failed to make image', data: { error: 'Failed to make image' }})
+        return { error: 'Failed to make image' }
       }
-
-      // 验证图像尺寸
-      if (!image.meetsMinimumSize(croppedImage)) {
-        const size = croppedImage.getSize()
-        return { 
-          error: `Image dimensions are too small. Minimum allowed dimension: 10 pixels. Current dimensions: width = ${size.width}, height = ${size.height}` 
-        }
+      if ('error' in croppedImage) {
+        Logger.error({message: 'Failed to make image', data: { error: croppedImage.error }})
+        return { error: croppedImage.error }
       }
-      
       // 调用 OCR
       return await mgrOCR.recognizeText(croppedImage)
     } catch (error) {
@@ -325,8 +345,25 @@ export const handlers: IShunshotCoreAPI = {
     return mgrAgents.deleteAgent(id)
   },
 
-  runAgent: async (id, options) => {
-    return mgrAgents.runAgent(id, options)
+  runAgent: async (id, options: AgentRunOptions): Promise<AgentResult> => {
+    Logger.log('Received OCR request')
+    try {
+      const croppedImage = MakeImage(options.selectedBounds) 
+      if (!croppedImage) {
+        Logger.error({message: 'Failed to make image', data: { error: 'Failed to make image' }})
+        return { error: 'Failed to make image' }
+      }
+      if ('error' in croppedImage) {
+        Logger.error({message: 'Failed to make image', data: { error: croppedImage.error }})
+        return { error: croppedImage.error }
+      }
+      // 调用 OCR
+      return await mgrAgents.runAgent(id, croppedImage, options)
+    } catch (error) {
+      Logger.error('Failed to process OCR', error as Error)
+      return { error: 'OCR processing failed' }
+    }
+    
   }
 }
 

@@ -78,16 +78,16 @@ const CaptureWrapper: React.FC = () => {
     const handleFocus = () => logWindowState('Window focus event')
     
     const handleMouseEvent = (e: MouseEvent) => {
-      translog.debug(`Mouse ${e.type} event:`, {
-        type: e.type,
-        button: e.button,
-        buttons: e.buttons,
-        clientX: e.clientX,
-        clientY: e.clientY,
-        hasFocus: document.hasFocus(),
-        activeElement: document.activeElement?.tagName,
-        timestamp: Date.now()
-      })
+      // translog.debug(`Mouse ${e.type} event:`, {
+      //   type: e.type,
+      //   button: e.button,
+      //   buttons: e.buttons,
+      //   clientX: e.clientX,
+      //   clientY: e.clientY,
+      //   hasFocus: document.hasFocus(),
+      //   activeElement: document.activeElement?.tagName,
+      //   timestamp: Date.now()
+      // })
     }
     
     // 记录初始状态

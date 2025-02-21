@@ -21,10 +21,38 @@ export interface AgentConfig {
   }
 }
 
+ 
+export type ChatCompletionContentPart =
+  | ChatCompletionContentPartText
+  | ChatCompletionContentPartImage
+  | ChatCompletionContentPartInputAudio;
+ 
+export interface ChatCompletionContentPartImage {
+  image_url: {
+    url: string;
+    detail?: 'auto' | 'low' | 'high';
+  }
+  type: 'image_url';
+}
+
+export interface ChatCompletionContentPartInputAudio {
+  input_audio: { 
+    data: string; 
+    format: 'wav' | 'mp3';
+  }
+  type: 'input_audio';
+}
+
+export interface ChatCompletionContentPartText {
+  text: string;
+  type: 'text';
+}
+
+
 export interface AgentMessage {
   role: AgentRole
-  content: string
-  timestamp: number
+  content: string | ChatCompletionContentPart[]
+  timestamp?: number
   error?: string
 }
 
@@ -41,7 +69,7 @@ export interface Conversation {
 }
 
 export interface AgentResult {
-  conversation: Conversation
+  conversation?: Conversation
   latestMessage?: AgentMessage
   error?: string
 }
