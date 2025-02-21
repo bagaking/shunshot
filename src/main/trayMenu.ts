@@ -10,6 +10,7 @@ import { existsSync } from 'fs'
  */
 export class TrayManager {
   private tray: Tray | null = null
+  private updateMenuCallback: (() => void) | null = null
 
   /**
    * 生成默认的小猫图标
@@ -106,6 +107,9 @@ export class TrayManager {
    * 获取菜单模板
    */
   private getMenuTemplate(): MenuItemConstructorOptions[] {
+    const mainWindow = mgrWindows.getMainWindow()
+    const isVisible = mainWindow?.isVisible() ?? false
+
     return [
       {
         label: 'Shunshot',
@@ -118,11 +122,9 @@ export class TrayManager {
       },
       { type: 'separator' },
       {
-        label: '显示主窗口',
-        type: 'checkbox',
-        checked: mgrWindows.getMainWindow()?.isVisible() ?? false,
+        label: isVisible ? '隐藏主窗口' : '显示主窗口',
+        type: 'normal',
         click: () => {
-          const mainWindow = mgrWindows.getMainWindow()
           if (mainWindow) {
             if (mainWindow.isVisible()) {
               mainWindow.hide()
@@ -130,6 +132,7 @@ export class TrayManager {
               mainWindow.show()
               mainWindow.focus()
             }
+            this.updateMenu()
           }
         }
       },
@@ -169,6 +172,16 @@ export class TrayManager {
   }
 
   /**
+   * 更新托盘菜单
+   */
+  private updateMenu = () => {
+    if (this.tray) {
+      const menu = this.createMenu()
+      this.tray.setContextMenu(menu)
+    }
+  }
+
+  /**
    * 创建或更新托盘
    */
   createTray() {
@@ -192,14 +205,6 @@ export class TrayManager {
     this.tray = new Tray(icon)
     this.tray.setToolTip('Shunshot')
     
-    // 设置菜单和事件处理
-    const updateMenu = () => {
-      if (this.tray) {
-        const menu = this.createMenu()
-        this.tray.setContextMenu(menu)
-      }
-    }
-    
     // 设置点击行为
     if (process.platform === 'win32') {
       // Windows: 左键点击显示菜单
@@ -207,28 +212,40 @@ export class TrayManager {
         this.tray?.popUpContextMenu()
       })
     } else {
-      // macOS: 左键点击切换主窗口
+      // macOS: 左键和右键点击都显示菜单
       this.tray.on('click', () => {
-        const mainWindow = mgrWindows.getMainWindow()
-        if (mainWindow) {
-          if (mainWindow.isVisible()) {
-            mainWindow.hide()
-          } else {
-            mainWindow.show()
-            mainWindow.focus()
-          }
-        }
+        this.tray?.popUpContextMenu()
+      })
+      this.tray.on('right-click', () => {
+        this.tray?.popUpContextMenu()
       })
     }
     
     // 初始化菜单
-    updateMenu()
+    this.updateMenu()
     
     // 监听窗口显示/隐藏事件以更新菜单
     const mainWindow = mgrWindows.getMainWindow()
     if (mainWindow) {
-      mainWindow.on('show', updateMenu)
-      mainWindow.on('hide', updateMenu)
+      // 移除旧的事件监听器
+      if (this.updateMenuCallback) {
+        mainWindow.off('show', this.updateMenuCallback)
+        mainWindow.off('hide', this.updateMenuCallback)
+      }
+      
+      // 添加新的事件监听器
+      this.updateMenuCallback = this.updateMenu
+      mainWindow.on('show', this.updateMenuCallback)
+      mainWindow.on('hide', this.updateMenuCallback)
+      
+      // 监听窗口关闭事件，清理事件监听器
+      mainWindow.once('closed', () => {
+        if (this.updateMenuCallback) {
+          mainWindow.off('show', this.updateMenuCallback)
+          mainWindow.off('hide', this.updateMenuCallback)
+          this.updateMenuCallback = null
+        }
+      })
     }
     
     Logger.log('Tray created successfully')
@@ -246,6 +263,13 @@ export class TrayManager {
    * 销毁托盘
    */
   destroy() {
+    const mainWindow = mgrWindows.getMainWindow()
+    if (mainWindow && this.updateMenuCallback) {
+      mainWindow.off('show', this.updateMenuCallback)
+      mainWindow.off('hide', this.updateMenuCallback)
+      this.updateMenuCallback = null
+    }
+    
     if (this.tray) {
       this.tray.destroy()
       this.tray = null

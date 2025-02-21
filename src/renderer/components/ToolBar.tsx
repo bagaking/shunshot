@@ -1,11 +1,17 @@
-import React, { useState } from 'react'
-import { CaptureBounds } from '../types/capture'
+import React, { useState, useEffect } from 'react'
+import { AgentConfig, AgentMessage } from '../../types/agents'
+import { Bounds } from '../../common/2d'
+import { message as antdMessage } from 'antd' 
+import { usePanelManager } from '../panels/PanelManager' 
+import { translog } from '../utils/translog'
+import { Square, Circle, Pencil, Grid } from 'lucide-react'
+import { EditOutlined, FileSearchOutlined, VideoCameraOutlined, CameraOutlined, RobotOutlined, CloseOutlined, CheckOutlined } from '@ant-design/icons'
 
 interface ToolBarProps {
   onConfirm: () => void
   onCancel: () => void
-  onOCR: ()=> Promise<{text?: string, error?: any}>
-  selectedBounds: CaptureBounds | null
+  onOCR: () => Promise<{text?: string, error?: any}>
+  selectedBounds: Bounds | null
   isScreenRecording?: boolean
   onModeChange?: (isScreenRecording: boolean) => void
 }
@@ -17,10 +23,39 @@ interface ToolButton {
   primary?: boolean
   disabled?: boolean
 }
+ 
+const AgentMenu: React.FC<{
+  onClose: () => void
+  onSelect: (agentId: string) => void
+  selectedBounds: Bounds | null
+}> = ({ onClose, onSelect, selectedBounds }) => {
+  const [agents, setAgents] = useState<AgentConfig[]>([])
+  
+  useEffect(() => {
+    window.shunshotCoreAPI.getAgents().then(setAgents)
+  }, [])
 
-interface OCRResult {
-  text?: string
-  error?: string
+  return (
+    <div className="absolute top-full left-0 mt-1 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5">
+      <div className="py-1">
+        {agents.map(agent => (
+          agent.enabled && (
+            <button
+              key={agent.id}
+              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => onSelect(agent.id)}
+              disabled={!selectedBounds}
+            >
+              <div className="flex items-center space-x-2">
+                <div className="text-lg">{agent.icon}</div>
+                <span>{agent.name}</span>
+              </div>
+            </button>
+          )
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export const ToolBar: React.FC<ToolBarProps> = ({
@@ -32,136 +67,237 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   onModeChange
 }) => {
   const [activeTooltip, setActiveTooltip] = useState<string>('')
-  const [ocrResult, setOcrResult] = useState<OCRResult | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
-
+  const [showAgentMenu, setShowAgentMenu] = useState(false)
+  const panelManager = usePanelManager()
+  
   const handleOCR = async () => {
     if (!selectedBounds) {
-      setOcrResult({ error: '请先选择要识别的区域' })
+      antdMessage.error('请先选择要识别的区域')
       return
     }
 
     setIsProcessing(true)
-    try {
-      const result = await onOCR()
-      if (result.error) {
-        setOcrResult({ 
-          error: result.error 
-        })
-      } else {
-        setOcrResult({ 
-          text: result.text 
-        })
+    
+    // Create OCR result panel immediately
+    const panelId = panelManager.createPanel({
+      type: 'chat',
+      bounds: selectedBounds,
+      position: { x: 100, y: 100 },
+      contentProps: {
+        title: 'OCR 识别结果',
+        messages: [],
+        loading: true
       }
-    } catch (error) {
-      setOcrResult({ error: '识别失败,请重试' })
+    })
+    
+    translog.debug('OCR panel created', { panelId })
+    
+    try {
+      translog.debug('Starting OCR process', { bounds: selectedBounds })
+      const result = await onOCR()
+      const messages: AgentMessage[] = []
+      
+      if (result.error) {
+        messages.push({
+          role: 'system',
+          content: '识别文字',
+          timestamp: Date.now(),
+          error: result.error
+        })
+        translog.error('OCR error:', result.error)
+      } else {
+        messages.push({
+          role: 'system',
+          content: result.text || '',
+          timestamp: Date.now()
+        })
+        translog.debug('OCR success:', { text: result.text })
+      }
+
+      // Update panel with results
+      panelManager.updatePanel(panelId, {
+        contentProps: {
+          title: 'OCR 识别结果',
+          messages,
+          loading: false
+        }
+      })
+      
+      translog.debug('OCR panel updated with results')
+    } catch (err) {
+      translog.error('OCR process failed:', err)
+      antdMessage.error('识别失败，请重试')
+      panelManager.removePanel(panelId)
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  const handleAgentSelect = async (agentId: string) => {
+    if (!selectedBounds) return
+
+    try {
+      setIsProcessing(true)
+      
+      // Get agent config
+      const agentList = await window.shunshotCoreAPI.getAgents()
+      const selectedAgent = agentList.find(a => a.id === agentId)
+      
+      if (!selectedAgent) {
+        translog.error('Selected agent not found', { agentId })
+        return
+      }
+
+      // Create panel with loading state
+      const panelId = panelManager.createPanel({
+        type: 'chat',
+        position: { x: 100, y: 100 },
+        contentProps: {
+          messages: [],
+          title: selectedAgent.name,
+          agent: selectedAgent,
+          availableAgents: agentList,
+          loading: true,
+          onSend: async (message: string) => {
+            const panel = panelManager.getPanelState(panelId)
+            if (!panel) return
+
+            try {
+              panelManager.updatePanel(panelId, {
+                contentProps: {
+                  ...panel.contentProps,
+                  loading: true
+                }
+              })
+
+              // Run agent with conversation context
+              const result = await window.shunshotCoreAPI.runAgent(agentId, {
+                selectedBounds,
+                conversationId: panel.contentProps.conversationId,
+                parameters: {
+                  messages: [{
+                    role: 'user',
+                    content: message,
+                    timestamp: Date.now()
+                  }]
+                }
+              })
+
+              // Update panel with full conversation
+              panelManager.updatePanel(panelId, {
+                contentProps: {
+                  ...panel.contentProps,
+                  conversationId: result.conversation.id,
+                  messages: result.conversation.messages.map(m => ({
+                    type: m.role === 'user' ? 'user' : m.role === 'assistant' ? 'agent' : 'system',
+                    content: m.content,
+                    error: m.error,
+                    timestamp: m.timestamp
+                  })),
+                  loading: false
+                }
+              })
+            } catch (error) {
+              translog.error('Failed to process message', error)
+              panelManager.updatePanel(panelId, {
+                contentProps: {
+                  ...panel.contentProps,
+                  loading: false
+                }
+              })
+            }
+          }
+        }
+      })
+
+      // Initial agent run to start conversation
+      const result = await window.shunshotCoreAPI.runAgent(agentId, {
+        selectedBounds
+      })
+
+      panelManager.updatePanel(panelId, {
+        contentProps: {
+          messages: result.conversation.messages.map(m => ({
+            type: m.role === 'user' ? 'user' : m.role === 'assistant' ? 'agent' : 'system',
+            content: m.content,
+            error: m.error,
+            timestamp: m.timestamp
+          })),
+          title: selectedAgent.name,
+          agent: selectedAgent,
+          availableAgents: agentList,
+          conversationId: result.conversation.id,
+          loading: false
+        }
+      })
+
+    } catch (error) {
+      translog.error('Failed to handle agent selection', error)
+      antdMessage.error('启动 AI 助手失败，请重试')
+    } finally {
+      setIsProcessing(false)
+      setShowAgentMenu(false)
     }
   }
 
   const tools: ToolButton[] = [
     {
       tooltip: '矩形选择',
-      icon: (
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z" />
-        </svg>
-      )
+      icon: <Square className="w-3.5 h-3.5" />,
     },
     {
       tooltip: '椭圆选择',
-      icon: (
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 3c4.97 0 9 3.13 9 7s-4.03 7-9 7-9-3.13-9-7 4.03-7 9-7z" />
-        </svg>
-      )
+      icon: <Circle className="w-3.5 h-3.5" />,
     },
     {
       tooltip: '画笔',
-      icon: (
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-        </svg>
-      )
+      icon: <Pencil className="w-3.5 h-3.5" />,
     },
     {
       tooltip: '马赛克',
-      icon: (
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
-      )
+      icon: <Grid className="w-3.5 h-3.5" />,
     },
     {
       tooltip: '文字',
-      icon: (
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-        </svg>
-      )
+      icon: <EditOutlined />,
     },
     {
       tooltip: 'OCR 识别',
-      icon: (
-        <svg className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M7 3a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V7.414a2 2 0 00-.586-1.414l-3.414-3.414A2 2 0 0013.586 2H7zm5 1v3a2 2 0 002 2h3M7 13h10M7 17h10M7 9h3" />
-        </svg>
-      ),
+      icon: <FileSearchOutlined spin={isProcessing} />,
       onClick: handleOCR,
       disabled: !selectedBounds || isProcessing
     },
     {
       tooltip: isScreenRecording ? '切换到截图' : '切换到录屏',
-      icon: (
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          {isScreenRecording ? (
-            <path d="M3 9a2 2 0 012-2h14a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-          ) : (
-            <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14v-4z M3 8v8a2 2 0 002 2h10a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2z" />
-          )}
-        </svg>
-      ),
+      icon: isScreenRecording ? <CameraOutlined /> : <VideoCameraOutlined />,
       onClick: () => onModeChange?.(!isScreenRecording)
     },
     {
-      tooltip: 'AI 助手',
-      icon: (
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c5.51 0 10-4.48 10-10S17.51 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
-          <path d="M9 9a3 3 0 015.12-2.12L15.24 8m-.01 4l-1.13 1.12a3 3 0 01-5.12-2.12" />
-          <circle cx="12" cy="12" r="2" />
-        </svg>
-      )
+      tooltip: 'AI Agents',
+      icon: <RobotOutlined spin={isProcessing} />,
+      onClick: () => setShowAgentMenu(true),
+      disabled: !selectedBounds || isProcessing
     }
   ]
 
   const actions: ToolButton[] = [
     {
       tooltip: '取消',
-      icon: (
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      ),
+      icon: <CloseOutlined />,
       onClick: onCancel
     },
     {
       tooltip: '确认',
       primary: true,
-      icon: (
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M5 13l4 4L19 7" />
-        </svg>
-      ),
+      icon: <CheckOutlined />,
       onClick: onConfirm
-    },
+    }
   ]
 
   return (
     <div className="flex flex-col items-start space-y-2">
-      <div className="flex items-center space-x-1 bg-white/90 backdrop-blur-sm shadow-md rounded-lg p-1">
+      <div className="relative flex items-center space-x-1 bg-white/90 backdrop-blur-sm shadow-md rounded-lg p-1">
         {/* 工具按钮组 */}
         <div className="flex items-center space-x-0.5">
           {tools.map((tool, index) => (
@@ -189,6 +325,15 @@ export const ToolBar: React.FC<ToolBarProps> = ({
             </div>
           ))}
         </div>
+
+        {/* Agent菜单 */}
+        {showAgentMenu && (
+          <AgentMenu
+            onClose={() => setShowAgentMenu(false)}
+            onSelect={handleAgentSelect}
+            selectedBounds={selectedBounds}
+          />
+        )}
 
         {/* 分隔线 */}
         <div className="w-[1px] self-stretch mx-0.5 bg-gray-200/80" />
@@ -218,37 +363,6 @@ export const ToolBar: React.FC<ToolBarProps> = ({
           ))}
         </div>
       </div>
-
-      {/* OCR 结果展示 */}
-      {ocrResult && (
-        <div className={`max-w-md p-2 rounded-lg shadow-md text-sm ${
-          ocrResult.error 
-            ? 'bg-red-50 text-red-600 border border-red-200' 
-            : 'bg-white/90 backdrop-blur-sm text-gray-700'
-        }`}>
-          {ocrResult.error ? (
-            <div className="flex items-center space-x-1">
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>{ocrResult.error}</span>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500">识别结果:</span>
-                <button
-                  onClick={() => navigator.clipboard.writeText(ocrResult.text || '')}
-                  className="text-xs text-blue-500 hover:text-blue-600"
-                >
-                  复制
-                </button>
-              </div>
-              <p className="whitespace-pre-wrap">{ocrResult.text}</p>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 } 

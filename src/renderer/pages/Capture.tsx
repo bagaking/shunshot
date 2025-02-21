@@ -4,31 +4,25 @@ import { ToolBar } from '../components/ToolBar'
 import { DebugPanel } from '../components/DebugPanel'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { useCapture } from '../hooks/useCapture'
-import { CaptureData, DisplayInfo, CaptureMode } from '../types/capture'
+import { CaptureData, CaptureMode } from '../../types/capture'
 import { translog } from '../utils/translog'
 import { performanceHelper } from '../utils/performanceHelper'
 import { eventHelper } from '../utils/eventHelper'
 import { positionHelper } from '../utils/positionHelper'
 import { canvasRenderHelper } from '../utils/canvasRenderHelper'
+import { useCaptureContext } from '../providers/CaptureProvider'
 
 // 使用 React.memo 优化子组件
 const MemoizedInfoPanel = React.memo(InfoPanel)
 const MemoizedToolBar = React.memo(ToolBar)
 const MemoizedDebugPanel = React.memo(DebugPanel)
 
-interface CaptureProps {
-  captureData: CaptureData | null
-  displayInfo: DisplayInfo | null
-  onDisplayInfoChange: (info: DisplayInfo | null) => void
-}
-
-const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayInfoChange }) => {
-  // console.log('Capture component rendering')
+const Capture: React.FC = () => {
+  const { captureData, displayInfo, setDisplayInfo } = useCaptureContext()
 
   const {
     selectedRect,
     mousePosition,
-    setDisplayInfo,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
@@ -37,7 +31,7 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
     getBoundsFromRect,
     handleOCR,
     resetSelection,
-  } = useCapture({ displayInfo, onDisplayInfoChange })
+  } = useCapture({ displayInfo, onDisplayInfoChange: setDisplayInfo })
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [backgroundImage, setBackgroundImage] = useState<HTMLImageElement | null>(null)
@@ -74,6 +68,28 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
     })
 
     try {
+      // 创建 Uint8ClampedArray 视图
+      const { width, height } = data.imageSize
+      const imageData = new ImageData(
+        new Uint8ClampedArray(data.imageBuffer),
+        width,
+        height
+      )
+      
+      // 使用 createImageBitmap 创建位图
+      const bitmap = await createImageBitmap(imageData)
+      
+      // 创建临时 canvas 来转换 bitmap 为 image
+      const tempCanvas = document.createElement('canvas')
+      tempCanvas.width = width
+      tempCanvas.height = height
+      const tempCtx = tempCanvas.getContext('2d')
+      if (!tempCtx) {
+        throw new Error('Failed to get temp canvas context')
+      }
+      
+      tempCtx.drawImage(bitmap, 0, 0)
+      
       const img = new Image()
       loadingImageRef.current = img
 
@@ -81,13 +97,12 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
         img.onload = () => {
           if (loadingImageRef.current === img) {
             setBackgroundImage(img)
-            // Reset initial canvas state when loading new image
             setInitialCanvasState(null)
             resolve()
           }
         }
         img.onerror = (error) => reject(error)
-        img.src = data.imageData
+        img.src = tempCanvas.toDataURL()
       })
 
       translog.debug('Image loaded successfully', {
@@ -162,7 +177,8 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
     translog.debug('Processing capture data', {
       bounds: captureData.displayInfo.bounds,
       scaleFactor: captureData.displayInfo.scaleFactor,
-      imageDataLength: captureData.imageData.length,
+      imageBufferLength: captureData.imageBuffer.length,
+      imageSize: captureData.imageSize,
       timestamp: Date.now()
     })
     
@@ -372,4 +388,4 @@ const Capture: React.FC<CaptureProps> = ({ captureData, displayInfo, onDisplayIn
   )
 }
 
-export default React.memo(Capture) 
+export default Capture 

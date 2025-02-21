@@ -1,5 +1,5 @@
 import { translog } from './translog'
-import { CaptureData } from '../types/capture'
+import { CaptureData } from '../../types/capture'
 
 type EventCleanup = () => void
 type DataCallback = (data: CaptureData) => void
@@ -45,8 +45,9 @@ class EventHelper implements EventHelperInterface {
     onError: ErrorCallback
   ): void {
     translog.debug('SCREEN_CAPTURE_DATA event received', {
-      hasImageData: !!data.imageData,
-      imageDataLength: data.imageData?.length,
+      hasImageBuffer: !!data.imageBuffer,
+      imageBufferLength: data.imageBuffer?.length,
+      imageSize: data.imageSize,
       hasDisplayInfo: !!data.displayInfo,
       displayInfo: data.displayInfo,
       timestamp: Date.now()
@@ -68,16 +69,16 @@ class EventHelper implements EventHelperInterface {
       throw new Error('Received empty capture data')
     }
 
-    if (!data.imageData) {
-      throw new Error('Received capture data without image data')
+    if (!data.imageBuffer || data.imageBuffer.length === 0) {
+      throw new Error('No image buffer received')
+    }
+
+    if (!data.imageSize || !data.imageSize.width || !data.imageSize.height) {
+      throw new Error('Invalid image size')
     }
 
     if (!data.displayInfo) {
       throw new Error('Received capture data without display info')
-    }
-
-    if (!data.imageData.startsWith('data:image/')) {
-      throw new Error('Invalid image data format')
     }
   }
 

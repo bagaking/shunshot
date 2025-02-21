@@ -12,11 +12,17 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@ant-design/icons": "^5.6.1",
+    "@headlessui/react": "^2.2.0",
     "@tanstack/react-query": "^5.0.0",
     "@types/fabric": "^5.3.9",
+    "antd": "^5.24.1",
     "electron-store": "6.0.1",
     "fabric": "^6.6.0",
+    "framer-motion": "^12.4.7",
+    "lucide-react": "^0.475.0",
     "openai": "^4.79.1",
+    "pako": "^2.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-draggable": "^4.4.6",
@@ -27,7 +33,9 @@
   "devDependencies": {
     "@electron-forge/cli": "^7.6.0",
     "@electron/notarize": "^2.5.0",
+    "@types/lodash": "^4.17.15",
     "@types/node": "^22.10.7",
+    "@types/pako": "^2.0.3",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",

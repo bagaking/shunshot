@@ -5,10 +5,10 @@ import Capture from './pages/Capture'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { debugHelper } from './utils/DebugHelper'
 import { translog } from './utils/translog'
-import { performanceHelper } from './utils/performanceHelper'
-import { CaptureData, DisplayInfo } from './types/capture'
-import './index.css'
-import { eventHelper } from './utils/eventHelper'
+import { performanceHelper } from './utils/performanceHelper' 
+import './index.css' 
+import { CaptureProvider } from './providers/CaptureProvider'
+import { PanelManagerProvider } from './panels/PanelManager'
 
 translog.debug('Capture window renderer starting...')
 
@@ -54,10 +54,7 @@ const updateMousePosition = performanceHelper.debounce(handleMousePositionUpdate
 
 // 创建一个包装组件来管理状态
 const CaptureWrapper: React.FC = () => {
-  const [captureData, setCaptureData] = useState<CaptureData | null>(null)
-  const [error, setError] = useState<Error | null>(null)
   const [isDebugMode, setIsDebugMode] = useState(false)
-  const [displayInfo, setDisplayInfo] = useState<DisplayInfo | null>(null)
   
   // 焦点管理
   useEffect(() => {
@@ -114,14 +111,76 @@ const CaptureWrapper: React.FC = () => {
 
   // 组件生命周期管理
   useEffect(() => {
+    let isComponentMounted = true;
+
+    const handleError = (error: Error | unknown) => {
+      if (isComponentMounted) {
+        try {
+          // Create a safe error object that can be serialized
+          const safeError = {
+            type: 'error',
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+            timestamp: Date.now()
+          };
+          translog.error('[CaptureWindow] Error:', safeError);
+        } catch (e) {
+          // Fallback error logging with minimal data
+          translog.error('[CaptureWindow] Failed to process error:', {
+            type: 'error_processing_failure',
+            message: 'Error object could not be processed',
+            timestamp: Date.now()
+          });
+        }
+      }
+    };
+
+    // 设置全局的未处理 Promise 错误处理器
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      event.preventDefault();
+      try {
+        const reason = event.reason;
+        // 创建一个可序列化的错误对象，确保所有属性都是可克隆的
+        const safeError = {
+          type: 'unhandled_rejection',
+          message: reason instanceof Error ? reason.message : 
+            (reason && typeof reason === 'object' ? 
+              // 只保留可序列化的属性
+              JSON.stringify(Object.getOwnPropertyNames(reason).reduce((acc, key) => {
+                const value = reason[key];
+                if (typeof value !== 'function' && typeof value !== 'symbol') {
+                  acc[key] = value;
+                }
+                return acc;
+              }, {} as Record<string, unknown>))
+            : String(reason)),
+          stack: reason instanceof Error ? reason.stack : undefined,
+          timestamp: Date.now()
+        };
+        translog.error('[CaptureWindow] Unhandled promise rejection:', safeError);
+      } catch (e) {
+        // 回退到最小化的错误日志
+        translog.error('[CaptureWindow] Failed to process rejection:', {
+          type: 'rejection_processing_failure',
+          message: 'Rejection could not be processed',
+          timestamp: Date.now()
+        });
+      }
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
     const cleanup = [
       setupMouseTracking(),
       setupWindowResizing(),
       setupDebugMode(),
-      setupCaptureEvents()
-    ]
+      () => {
+        isComponentMounted = false;
+        window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      }
+    ];
 
-    return () => cleanup.forEach(fn => fn())
+    return () => cleanup.forEach(fn => fn?.());
   }, [])
 
   // 鼠标追踪设置
@@ -150,78 +209,13 @@ const CaptureWrapper: React.FC = () => {
     return () => debugHelper.offDebugModeChange(handleDebugModeChange)
   }
 
-  // 截图事件设置
-  const setupCaptureEvents = () => {
-    translog.debug('Setting up capture events', {
-      timestamp: Date.now(),
-      componentId: Math.random().toString(36).slice(2, 9)
-    })
-
-    const startTime = performance.now()
-
-    const startCaptureCleanup = eventHelper.setupCaptureStartListener(() => {
-      setCaptureData(null)
-      setDisplayInfo(null)
-      setError(null)
-    })
-
-    const captureDataCleanup = eventHelper.setupCaptureDataListener(
-      (data) => {
-        translog.debug('Received screen capture data', {
-          hasData: !!data,
-          hasImageData: !!data.imageData,
-          hasDisplayInfo: !!data.displayInfo,
-          imageSize: data.imageData.length,
-          bounds: data.displayInfo.bounds,
-          scaleFactor: data.displayInfo.scaleFactor,
-          timestamp: Date.now()
-        })
-
-        setCaptureData(data)
-        setDisplayInfo(data.displayInfo)
-      },
-      (error) => {
-        translog.error('Error in capture data listener:', error)
-        setError(error)
-      }
-    )
-
-    const endTime = performance.now()
-    translog.debug('Capture events setup complete', {
-      duration: endTime - startTime,
-      timestamp: Date.now()
-    })
-
-    return () => {
-      startCaptureCleanup()
-      captureDataCleanup()
-    }
-  }
-
-  if (error) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="bg-white p-4 rounded-lg shadow-lg max-w-md">
-          <h2 className="text-red-600 text-lg font-semibold mb-2">错误</h2>
-          <p className="text-gray-700 mb-4">{error.message}</p>
-          <button
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-            onClick={() => setError(null)}
-          >
-            关闭
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <ErrorBoundary>
-      <Capture
-        captureData={captureData}
-        displayInfo={displayInfo}
-        onDisplayInfoChange={setDisplayInfo}
-      />
+      <CaptureProvider>
+        <PanelManagerProvider>
+          <Capture />
+        </PanelManagerProvider>
+      </CaptureProvider>
     </ErrorBoundary>
   )
 }
