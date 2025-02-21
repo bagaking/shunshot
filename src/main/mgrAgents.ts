@@ -13,20 +13,36 @@ interface ModelConfig {
   modelName: string
 }
 
-export class AgentsManager {
+// Custom error classes
+class AgentError extends Error {
+  constructor(message: string, public code: string) {
+    super(message)
+    this.name = 'AgentError'
+  }
+}
+
+class ConfigError extends AgentError {
+  constructor(message: string) {
+    super(message, 'CONFIG_ERROR')
+  }
+}
+
+class ClientError extends AgentError {
+  constructor(message: string) {
+    super(message, 'CLIENT_ERROR')
+  }
+}
+
+// Configuration manager
+class AgentConfigManager {
   private agents: Map<string, AgentConfig> = new Map()
-  private openaiClients: Map<string, OpenAI | null> = new Map()
-  private conversations: Map<string, Conversation> = new Map()
 
   constructor() {
     this.loadAgents()
-    this.initializeOpenAI()
     
-    // 监听配置变更
     mgrPreference.subscribe((key) => {
-      if (key === 'agents' || key.startsWith('aiModel.')) {
+      if (key === 'agents') {
         this.loadAgents()
-        this.initializeOpenAI()
       }
     })
   }
@@ -35,202 +51,256 @@ export class AgentsManager {
     try {
       const storedAgents = mgrPreference.get<AgentConfig[]>('agents')
       
-      // 如果没有存储的 agents 或者数组为空，使用默认配置
-      if (!storedAgents || storedAgents.length === 0) {
-        this.agents = new Map(DEFAULT_AGENTS.map(agent => [agent.id, agent]))
-        mgrPreference.set('agents', DEFAULT_AGENTS)
-        Logger.log('Initialized with default agents')
-      } else {
-        // 验证每个 agent 的配置是否完整
-        const validAgents = storedAgents.filter(agent => {
-          const isValid = agent && agent.id && agent.modelConfig && 
-            (agent.modelConfig.id === 'vision' || agent.modelConfig.id === 'inference')
-          if (!isValid) {
-            Logger.warn(`Invalid agent config found: ${JSON.stringify(agent)}`)
-          }
-          return isValid
-        })
-        
-        this.agents = new Map(validAgents.map(agent => [agent.id, agent]))
-        
-        // 如果过滤后没有有效的 agents，使用默认配置
-        if (validAgents.length === 0) {
-          this.agents = new Map(DEFAULT_AGENTS.map(agent => [agent.id, agent]))
-          mgrPreference.set('agents', DEFAULT_AGENTS)
-          Logger.log('No valid agents found, restored defaults')
-        }
+      if (!storedAgents?.length) {
+        this.setDefaultAgents()
+        return
       }
-      
+
+      const validAgents = this.validateAgents(storedAgents)
+      if (!validAgents.length) {
+        this.setDefaultAgents()
+        return
+      }
+
+      this.agents = new Map(validAgents.map(agent => [agent.id, agent]))
       Logger.log(`Loaded ${this.agents.size} agents successfully`)
     } catch (error) {
       Logger.error('Failed to load agents', error as Error)
-      // 发生错误时使用默认配置
-      this.agents = new Map(DEFAULT_AGENTS.map(agent => [agent.id, agent]))
-      try {
-        mgrPreference.set('agents', DEFAULT_AGENTS)
-        Logger.log('Restored default agents after error')
-      } catch (e) {
-        Logger.error('Failed to restore default agents', e as Error)
-      }
+      this.setDefaultAgents()
     }
   }
 
-  private async initializeOpenAI() {
+  private setDefaultAgents() {
+    this.agents = new Map(DEFAULT_AGENTS.map(agent => [agent.id, agent]))
     try {
-      // 初始化视觉模型客户端
-      const visionConfig = await mgrPreference.get<ModelConfig>('aiModel.vision')
-      this.openaiClients.set('vision', visionConfig?.apiKey ? new OpenAI({
-        apiKey: visionConfig.apiKey,
-        baseURL: visionConfig.baseURL,
-      }) : null)
-
-      // 初始化推理模型客户端
-      const inferenceConfig = await mgrPreference.get<ModelConfig>('aiModel.inference')
-      this.openaiClients.set('inference', inferenceConfig?.apiKey ? new OpenAI({
-        apiKey: inferenceConfig.apiKey,
-        baseURL: inferenceConfig.baseURL,
-      }) : null)
-
-      Logger.log('OpenAI clients initialized')
+      mgrPreference.set('agents', DEFAULT_AGENTS)
+      Logger.log('Initialized with default agents')
     } catch (error) {
-      Logger.error(`Failed to initialize OpenAI clients: ${error instanceof Error ? error.message : String(error)}`)
-      this.openaiClients.clear()
+      Logger.error('Failed to set default agents', error as Error)
     }
   }
 
-  async getAgents(): Promise<AgentConfig[]> {
+  private validateAgents(agents: AgentConfig[]): AgentConfig[] {
+    return agents.filter(agent => {
+      const isValid = agent?.id && agent?.modelConfig && 
+        ['vision', 'inference'].includes(agent.modelConfig.id)
+      if (!isValid) {
+        Logger.warn(`Invalid agent config: ${JSON.stringify(agent)}`)
+      }
+      return isValid
+    })
+  }
+
+  getAgent(id: string): AgentConfig | undefined {
+    return this.agents.get(id)
+  }
+
+  getAllAgents(): AgentConfig[] {
     return Array.from(this.agents.values())
   }
 
   async createAgent(agent: AgentConfig): Promise<boolean> {
-    try {
-      if (this.agents.has(agent.id)) {
-        Logger.warn(`Agent already exists: ${agent.id}`)
-        return false
-      }
-
-      this.agents.set(agent.id, agent)
-      
-      // 保存所有 agents
-      const allAgents = Array.from(this.agents.values())
-      mgrPreference.set('agents', allAgents)
-
-      Logger.log(`Agent created successfully: ${agent.id}`)
-      return true
-    } catch (error) {
-      Logger.error(`Failed to create agent: ${error instanceof Error ? error.message : String(error)}`)
-      return false
+    if (this.agents.has(agent.id)) {
+      throw new ConfigError(`Agent already exists: ${agent.id}`)
     }
-  }
 
-  async deleteAgent(id: string): Promise<boolean> {
-    try {
-      if (!this.agents.has(id)) {
-        Logger.warn(`Agent not found: ${id}`)
-        return false
-      }
-
-      this.agents.delete(id)
-      
-      // 保存更新后的所有 agents
-      const allAgents = Array.from(this.agents.values())
-      mgrPreference.set('agents', allAgents)
-
-      Logger.log(`Agent deleted successfully: ${id}`)
-      return true
-    } catch (error) {
-      Logger.error(`Failed to delete agent: ${error instanceof Error ? error.message : String(error)}`)
-      return false
-    }
+    this.agents.set(agent.id, agent)
+    await this.saveAgents()
+    return true
   }
 
   async updateAgent(id: string, updates: Partial<AgentConfig>): Promise<boolean> {
+    const agent = this.agents.get(id)
+    if (!agent) {
+      throw new ConfigError(`Agent not found: ${id}`)
+    }
+
+    const updatedAgent = { ...agent, ...updates }
+    this.agents.set(id, updatedAgent)
+    await this.saveAgents()
+    return true
+  }
+
+  async deleteAgent(id: string): Promise<boolean> {
+    if (!this.agents.has(id)) {
+      throw new ConfigError(`Agent not found: ${id}`)
+    }
+
+    this.agents.delete(id)
+    await this.saveAgents()
+    return true
+  }
+
+  private async saveAgents() {
     try {
-      const agent = this.agents.get(id)
-      if (!agent) {
-        Logger.warn(`Agent not found: ${id}`)
-        return false
-      }
-
-      const updatedAgent = { ...agent, ...updates }
-      this.agents.set(id, updatedAgent)
-
-      // 保存更新后的所有 agents
       const allAgents = Array.from(this.agents.values())
-      mgrPreference.set('agents', allAgents)
-
-      Logger.log(`Agent updated successfully: ${id}`)
-      return true
+      await mgrPreference.set('agents', allAgents)
+      Logger.log('Agents saved successfully')
     } catch (error) {
-      Logger.error(`Failed to update agent: ${error instanceof Error ? error.message : String(error)}`)
-      return false
+      Logger.error('Failed to save agents', error as Error)
+      throw new ConfigError('Failed to save agents')
+    }
+  }
+}
+
+// OpenAI client manager
+class OpenAIClientManager {
+  private clients: Map<string, OpenAI | null> = new Map()
+
+  constructor() {
+    this.initialize()
+    
+    mgrPreference.subscribe((key) => {
+      if (key.startsWith('aiModel.')) {
+        this.initialize()
+      }
+    })
+  }
+
+  private async initialize() {
+    try {
+      await this.initializeClient('vision')
+      await this.initializeClient('inference')
+      Logger.log('OpenAI clients initialized')
+    } catch (error) {
+      Logger.error('Failed to initialize OpenAI clients', error as Error)
+      this.clients.clear()
     }
   }
 
+  private async initializeClient(type: 'vision' | 'inference') {
+    const config = await mgrPreference.get<ModelConfig>(`aiModel.${type}`)
+    this.clients.set(type, config?.apiKey ? new OpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+    }) : null)
+  }
+
+  getClient(type: 'vision' | 'inference'): OpenAI {
+    const client = this.clients.get(type)
+    if (!client) {
+      throw new ClientError(`OpenAI client not initialized: ${type}`)
+    }
+    return client
+  }
+}
+
+// Conversation manager
+class ConversationManager {
+  private conversations: Map<string, Conversation> = new Map()
+  private readonly MAX_CONVERSATIONS = 100
+  private readonly MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+  constructor() {
+    this.startCleanupInterval()
+  }
+
+  private startCleanupInterval() {
+    setInterval(() => this.cleanup(), 60 * 60 * 1000) // Cleanup every hour
+  }
+
+  private cleanup() {
+    const now = Date.now()
+    Array.from(this.conversations.entries()).forEach(([id, conversation]) => {
+      if (now - conversation.metadata.updatedAt > this.MAX_AGE_MS) {
+        this.conversations.delete(id)
+        Logger.debug(`Cleaned up conversation: ${id}`)
+      }
+    })
+  }
+
+  getConversation(id: string): Conversation | undefined {
+    return this.conversations.get(id)
+  }
+
+  createConversation(agentId: string): Conversation {
+    if (this.conversations.size >= this.MAX_CONVERSATIONS) {
+      this.cleanup()
+    }
+
+    const conversation: Conversation = {
+      id: crypto.randomUUID(),
+      agentId,
+      messages: [],
+      metadata: {
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        turnCount: 0
+      }
+    }
+
+    this.conversations.set(conversation.id, conversation)
+    return conversation
+  }
+
+  updateConversation(id: string, update: Partial<Conversation>) {
+    const conversation = this.conversations.get(id)
+    if (!conversation) {
+      throw new Error(`Conversation not found: ${id}`)
+    }
+
+    const updated = {
+      ...conversation,
+      ...update,
+      metadata: {
+        ...conversation.metadata,
+        updatedAt: Date.now()
+      }
+    }
+
+    this.conversations.set(id, updated)
+    return updated
+  }
+}
+
+// Agent runner
+class AgentRunner {
+  constructor(
+    private configManager: AgentConfigManager,
+    private clientManager: OpenAIClientManager,
+    private conversationManager: ConversationManager
+  ) {}
+
   async runAgent(id: string, croppedImage: NativeImage, options: AgentRunOptions): Promise<AgentResult> {
-    try { 
-      const agent = this.agents.get(id)
+    try {
+      const agent = this.configManager.getAgent(id)
       if (!agent) {
-        Logger.warn(`Agent not found: ${id}`)
-        throw new Error('Agent not found')
+        throw new AgentError(`Agent not found: ${id}`, 'AGENT_NOT_FOUND')
       }
 
       if (!agent.enabled) {
-        throw new Error(`Agent is disabled: ${id}`)
+        throw new AgentError(`Agent is disabled: ${id}`, 'AGENT_DISABLED')
       }
 
-      // 验证模型配置
-      if (!agent.modelConfig || !agent.modelConfig.id) {
-        throw new Error(`Invalid model configuration for agent: ${id}`)
-      }
-
-      const openai = this.openaiClients.get(agent.modelConfig.id)
-      if (!openai) {
-        throw new Error(`OpenAI client not initialized for model: ${agent.modelConfig.id}`)
-      }
-
+      const openai = this.clientManager.getClient(agent.modelConfig.id as 'vision' | 'inference')
       const modelConfig = await mgrPreference.get<ModelConfig>(`aiModel.${agent.modelConfig.id}`)
-      if (!modelConfig?.modelName) {
-        throw new Error(`Model name not configured for: ${agent.modelConfig.id}`)
-      }
-
-      if (!croppedImage) {
-        throw new Error('Failed to crop image')
-      }
-
-      // 验证裁剪后的图像
-      if (!image.meetsMinimumSize(croppedImage)) {
-        throw new Error('Cropped image is too small')
-      }
-
-      // 转换为 base64 
-      const base64Image = croppedImage.toDataURL().replace(/^data:image\/\w+;base64,/, '')
       
-      Logger.debug(`Running agent ${id} with model ${agent.modelConfig.name}`)
-      agent.parameters = agent.parameters || {}
-      const otherParams = omit(agent.parameters, 'messages')
+      if (!modelConfig?.modelName) {
+        throw new ConfigError(`Model name not configured: ${agent.modelConfig.id}`)
+      }
 
       // Get or create conversation
-      const conversationId = options.conversationId || crypto.randomUUID()
-      let conversation = this.conversations.get(conversationId) || {
-        id: conversationId,
-        agentId: id,
-        messages: [],
-        metadata: {
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          turnCount: 0
-        }
-      }
+      let conversation = options.conversationId ? 
+        this.conversationManager.getConversation(options.conversationId) :
+        this.conversationManager.createConversation(id)
 
-      // Add system message if it's a new conversation
-      if (conversation.messages.length === 0) {
+      if (!conversation) {
+        conversation = this.conversationManager.createConversation(id)
+        // Only add system message for new conversations
         conversation.messages.push({
           role: 'system',
           content: agent.systemPrompt,
         })
-          // Add user message with image
-        const userMessage: AgentMessage = {
+      }
+
+      // Process image if provided
+      if (croppedImage) {
+        if (!image.meetsMinimumSize(croppedImage)) {
+          throw new AgentError('Image is too small', 'INVALID_IMAGE')
+        }
+
+        const base64Image = croppedImage.toPNG().toString('base64')
+        conversation.messages.push({
           role: 'user',
           content: [
             {
@@ -244,13 +314,11 @@ export class AgentsManager {
               text: '这张图片说了啥' 
             },
           ],
-        }
-        conversation.messages.push(userMessage)
+          timestamp: Date.now()
+        })
       }
 
-    
-
-      // Add any additional messages from parameters
+      // Add user messages from parameters
       if (options.parameters?.messages) {
         conversation.messages.push(
           ...options.parameters.messages.map(m => ({
@@ -260,34 +328,21 @@ export class AgentsManager {
         )
       }
 
-      Logger.debug(`Conversation messages: ${JSON.stringify(conversation.messages)}`)
+      // Save conversation state with user messages
+      this.conversationManager.updateConversation(conversation.id, conversation)
 
       // Format messages for OpenAI API
-      const formattedMessages = conversation.messages.map(msg => {
-        // Ensure role is one of: 'system' | 'user' | 'assistant'
-        const role = msg.role as 'system' | 'user' | 'assistant'
-        
-        // Handle array content (for images etc)
-        if (Array.isArray(msg.content)) {
-          return {
-            role,
-            content: msg.content as any // Type assertion needed for OpenAI API
-          }
-        }
-        
-        // Handle string content
-        return {
-          role,
-          content: msg.content
-        }
-      })
+      const formattedMessages = conversation.messages.map(msg => ({
+        role: msg.role,
+        content: Array.isArray(msg.content) ? msg.content : msg.content
+      }))
 
-      // Call OpenAI
+      // Call OpenAI with conversation history
       const response = await openai.chat.completions.create({
         model: modelConfig.modelName,
-        messages: formattedMessages as any, // Type assertion needed for OpenAI API
-        max_tokens: otherParams.maxTokens || 4096,
-        temperature: otherParams.temperature || 0,
+        messages: formattedMessages as any,
+        max_tokens: agent.parameters?.maxTokens || 4096,
+        temperature: agent.parameters?.temperature || 0,
       })
 
       // Add assistant response
@@ -298,12 +353,10 @@ export class AgentsManager {
       }
       conversation.messages.push(assistantMessage)
 
-      // Update conversation metadata
+      // Update conversation
       conversation.metadata.updatedAt = Date.now()
       conversation.metadata.turnCount++
-
-      // Store updated conversation
-      this.conversations.set(conversationId, conversation)
+      this.conversationManager.updateConversation(conversation.id, conversation)
 
       return {
         conversation,
@@ -311,35 +364,55 @@ export class AgentsManager {
       }
 
     } catch (error) {
-      Logger.error(`Failed to run agent: ${error instanceof Error ? error.message : String(error)}`)
+      Logger.error('Failed to run agent:', error)
+      const conversation = options.conversationId ? 
+        this.conversationManager.getConversation(options.conversationId) :
+        this.conversationManager.createConversation(id)
       return {
-        conversation: this.conversations.get(options.conversationId!) || {
-          id: crypto.randomUUID(),
-          agentId: id,
-          messages: [],
-          metadata: {
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            turnCount: 0
-          }
-        },
+        conversation,
         error: error instanceof Error ? error.message : String(error)
       }
     }
   }
+}
 
-  // Add methods to manage conversations
-  async getConversation(id: string): Promise<Conversation | undefined> {
-    return this.conversations.get(id)
+// Main manager class
+export class AgentsManager {
+  private configManager: AgentConfigManager
+  private clientManager: OpenAIClientManager
+  private conversationManager: ConversationManager
+  private runner: AgentRunner
+
+  constructor() {
+    this.configManager = new AgentConfigManager()
+    this.clientManager = new OpenAIClientManager()
+    this.conversationManager = new ConversationManager()
+    this.runner = new AgentRunner(
+      this.configManager,
+      this.clientManager,
+      this.conversationManager
+    )
   }
 
-  async deleteConversation(id: string): Promise<boolean> {
-    return this.conversations.delete(id)
+  async getAgents(): Promise<AgentConfig[]> {
+    return this.configManager.getAllAgents()
   }
 
-  async clearConversations(): Promise<void> {
-    this.conversations.clear()
+  async createAgent(agent: AgentConfig): Promise<boolean> {
+    return this.configManager.createAgent(agent)
+  }
+
+  async updateAgent(id: string, updates: Partial<AgentConfig>): Promise<boolean> {
+    return this.configManager.updateAgent(id, updates)
+  }
+
+  async deleteAgent(id: string): Promise<boolean> {
+    return this.configManager.deleteAgent(id)
+  }
+
+  async runAgent(id: string, croppedImage: NativeImage, options: AgentRunOptions): Promise<AgentResult> {
+    return this.runner.runAgent(id, croppedImage, options)
   }
 }
- 
+
 export const mgrAgents = new AgentsManager() 

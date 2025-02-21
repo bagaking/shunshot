@@ -346,7 +346,7 @@ export const handlers: IShunshotCoreAPI = {
   },
 
   runAgent: async (id, options: AgentRunOptions): Promise<AgentResult> => {
-    Logger.log('Received OCR request')
+    Logger.log('Received agent request')
     try {
       const croppedImage = MakeImage(options.selectedBounds) 
       if (!croppedImage) {
@@ -357,13 +357,12 @@ export const handlers: IShunshotCoreAPI = {
         Logger.error({message: 'Failed to make image', data: { error: croppedImage.error }})
         return { error: croppedImage.error }
       }
-      // 调用 OCR
+      // 调用 agent
       return await mgrAgents.runAgent(id, croppedImage, options)
     } catch (error) {
-      Logger.error('Failed to process OCR', error as Error)
-      return { error: 'OCR processing failed' }
+      Logger.error('Failed to run agent:', error as Error)
+      return { error: 'Failed to run agent' }
     }
-    
   }
 }
 

@@ -182,10 +182,12 @@ export const ToolBar: React.FC<ToolBarProps> = ({
                 timestamp: Date.now()
               }
 
+              // Update panel with new message
+              const currentMessages = [...(panel.contentProps.messages || []), userMessage]
               panelManager.updatePanel(panelId, {
                 contentProps: {
                   ...panel.contentProps,
-                  messages: [...(panel.contentProps.messages || []), userMessage]
+                  messages: currentMessages
                 }
               })
 
@@ -201,13 +203,16 @@ export const ToolBar: React.FC<ToolBarProps> = ({
                 }
               )
 
-              // Update panel with full conversation
+              // Update panel with conversation
               if (result.conversation) {
+                // Keep local messages if something went wrong
+                const messages = result.error ? currentMessages : result.conversation.messages
+
                 panelManager.updatePanel(panelId, {
                   contentProps: {
                     ...panel.contentProps,
                     conversationId: result.conversation.id,
-                    messages: result.conversation.messages,
+                    messages,
                     loading: false,
                     // If agent was switched, update the agent info
                     ...(targetAgentId && targetAgentId !== agentId ? {
@@ -237,10 +242,13 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       })
 
       // Initial agent run to start conversation
-      const result = await window.shunshotCoreAPI.runAgent(agentId, {
-        selectedBounds,
-        parameters: {} // Remove initial message since it's handled by mgrAgents
-      })
+      const result = await window.shunshotCoreAPI.runAgent(
+        agentId,
+        {
+          selectedBounds,
+          parameters: {} // Remove initial message since it's handled by mgrAgents
+        }
+      )
 
       // Update panel with conversation
       if (result.conversation) {
