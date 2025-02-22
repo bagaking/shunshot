@@ -121,8 +121,10 @@ export const AIModelSettings: React.FC = () => {
 
   useEffect(() => {
     // 加载初始配置
-    window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.vision').then(setVisionConfig)
-    window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.inference').then(setInferenceConfig)
+    window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.vision')
+      .then(config => config && setVisionConfig(config))
+    window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.inference')
+      .then(config => config && setInferenceConfig(config))
   }, [])
 
   const handleVisionConfigChange = async (config: ModelConfig) => {

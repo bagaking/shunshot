@@ -56,8 +56,8 @@ export class ShortcutManager {
             Logger.log('Hiding main window')
             mainWindow.hide()
           }
-          // 创建截图窗口
-          await mgrCapture.createCaptureWindow()
+          // 开始截图
+          await mgrCapture.startCapture()
         } catch (error) {
           Logger.error('Failed to handle screenshot shortcut', error as Error)
           // 如果出错，显示主窗口

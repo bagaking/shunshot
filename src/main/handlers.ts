@@ -1,4 +1,4 @@
-import { screen } from 'electron'
+import { NativeImage, screen } from 'electron'
 import { Logger } from './logger'
 import { mgrWindows } from './mgrWindows'
 import { mgrCapture } from './mgrCapture'
@@ -6,8 +6,61 @@ import { mgrClipboard } from './mgrClipboard'
 import { mgrOCR } from './mgrOCR'
 import { mgrPreference } from './mgrPreference'
 import { mgrShortcut } from './shortcut'
-import { IShunshotCoreAPI } from '../types/electron'
-import { CaptureBounds } from '../renderer/types/capture'
+import { IShunshotCoreAPI } from '../types/shunshotapi'
+import { Bounds } from '../common/2d'
+import { image } from '../common/2d'
+import { mgrAgents } from './mgrAgents'
+import { AgentResult, AgentRunOptions } from '../types/agents'
+
+function MakeImage(bounds: Bounds): NativeImage | { error: string } {
+  const currentData = mgrCapture.getCurrentData()
+  if (!currentData) {
+    Logger.error('No capture data available')
+    return { error: 'No capture data available' }
+  }
+
+  if (!currentData.fullImage) {
+    Logger.error('No image data available')
+    return { error: 'No image data available' }
+  }
+
+  try {
+    // Log input validation
+    Logger.debug({
+      message: '[MkImg] Input validation',
+      data: {
+        hasFullImage: !!currentData.fullImage,
+        fullImageSize: currentData.fullImage.getSize(),
+        displaySpaceBounds: bounds,
+        captureSpaceBounds: currentData.bounds
+      }
+    })
+
+    // 使用新的图像处理模块裁剪图像
+    const croppedImage = image.cropFromDisplay(
+      currentData.fullImage,
+      bounds,
+      currentData.bounds
+    )
+
+    if (!croppedImage) {
+      Logger.error('Failed to crop image')
+      return { error: 'Failed to crop image' }
+    }
+
+    // 验证图像尺寸
+    if (!image.meetsMinimumSize(croppedImage)) {
+      const size = croppedImage.getSize()
+      return { 
+        error: `Image dimensions are too small. Minimum allowed dimension: 10 pixels. Current dimensions: width = ${size.width}, height = ${size.height}` 
+      }
+    }
+    return croppedImage
+  } catch (error) {
+    Logger.error('Failed to make image', error as Error)
+    return { error: 'Failed to make image' }
+  }
+}
 
 /**
  * 主进程处理器
@@ -42,7 +95,7 @@ export const handlers: IShunshotCoreAPI = {
     return unsubscribe
   },
 
-  completeCapture: async (bounds) => {
+  completeCapture: async (bounds: Bounds) => {
     Logger.log('Received COMPLETE_CAPTURE event')
     
     const currentData = mgrCapture.getCurrentData()
@@ -52,16 +105,12 @@ export const handlers: IShunshotCoreAPI = {
     }
 
     try {
-      const { fullImage } = currentData
-      const { x, y, width, height } = bounds
-
-      // 创建裁剪后的图像
-      const croppedImage = fullImage.crop({ x, y, width, height })
-      Logger.debug({ 
-        message: 'Cropped image info',
-        data: { croppedBounds: bounds, imageSize: croppedImage.getSize() }
-      })
-
+      const croppedImage = image.cropFromDisplay(
+        currentData.fullImage,
+        bounds,
+        currentData.bounds
+      )
+      
       // 将图像写入剪贴板
       mgrClipboard.copyImage(croppedImage)
       Logger.debug('Image copied to clipboard')
@@ -126,17 +175,11 @@ export const handlers: IShunshotCoreAPI = {
     }
 
     try {
-      const { fullImage } = currentData
-      const { x, y, width, height } = bounds
-
-      // 创建裁剪后的图像
-      const croppedImage = fullImage.crop({ x, y, width, height })
-      Logger.debug({ 
-        message: 'Cropped image info',
-        data: { croppedBounds: bounds, imageSize: croppedImage.getSize() }
-      })
-
-      // 将图像写入剪贴板
+      const croppedImage = image.cropFromDisplay(
+        currentData.fullImage,
+        bounds,
+        currentData.bounds
+      )
       mgrClipboard.copyImage(croppedImage)
     } catch (error) {
       Logger.error('Failed to copy to clipboard', error as Error)
@@ -247,23 +290,22 @@ export const handlers: IShunshotCoreAPI = {
     Logger.log(`Loading plugin: ${pluginId}`)
   },
 
+
+
+
   // OCR 相关
-  requestOCR: async (bounds: CaptureBounds) => {
+  requestOCR: async (bounds: Bounds) => {
     Logger.log('Received OCR request')
-    
-    const currentData = mgrCapture.getCurrentData()
-    if (!currentData) {
-      Logger.error('No capture data available')
-      return { error: 'No capture data available' }
-    }
-
     try {
-      const { fullImage } = currentData
-      const { x, y, width, height } = bounds
-
-      // 裁剪选中区域
-      const croppedImage = fullImage.crop({ x, y, width, height })
-      
+      const croppedImage = MakeImage(bounds) 
+      if (!croppedImage) {
+        Logger.error({message: 'Failed to make image', data: { error: 'Failed to make image' }})
+        return { error: 'Failed to make image' }
+      }
+      if ('error' in croppedImage) {
+        Logger.error({message: 'Failed to make image', data: { error: croppedImage.error }})
+        return { error: croppedImage.error }
+      }
       // 调用 OCR
       return await mgrOCR.recognizeText(croppedImage)
     } catch (error) {
@@ -284,6 +326,114 @@ export const handlers: IShunshotCoreAPI = {
   },
 
   // 系统相关
-  platform: process.platform
+  platform: process.platform,
+
+  // Agent 相关方法
+  getAgents: async () => {
+    return mgrAgents.getAgents()
+  },
+
+  createAgent: async (agent) => {
+    return mgrAgents.createAgent(agent)
+  },
+
+  updateAgent: async (id, config) => {
+    return mgrAgents.updateAgent(id, config)
+  },
+
+  deleteAgent: async (id) => {
+    return mgrAgents.deleteAgent(id)
+  },
+
+  runAgent: async (id, options: AgentRunOptions): Promise<AgentResult> => {
+    console.log('Received agent request')
+    
+    try {
+      // Get cropped image
+      const result = await MakeImage(options.selectedBounds)
+      if ('error' in result) {
+        return { error: result.error }
+      }
+
+      // Sanitize messages to ensure they are serializable
+      const sanitizedOptions = {
+        ...options,
+        parameters: options.parameters ? {
+          ...options.parameters,
+          messages: options.parameters.messages?.map(msg => ({
+            role: msg.role,
+            content: Array.isArray(msg.content) 
+              ? msg.content.map(part => {
+                  if (part.type === 'text') {
+                    return {
+                      type: 'text' as const,
+                      text: part.text
+                    }
+                  } else if (part.type === 'image_url') {
+                    return {
+                      type: 'image_url' as const,
+                      image_url: {
+                        url: part.image_url.url,
+                        detail: part.image_url.detail || 'auto'
+                      }
+                    }
+                  }
+                  return part
+                })
+              : msg.content,
+            timestamp: msg.timestamp
+          }))
+        } : undefined
+      }
+
+      // Run agent with sanitized options
+      const agentResult = await mgrAgents.runAgent(id, result, sanitizedOptions)
+
+      // Ensure the response is serializable
+      return {
+        conversation: agentResult.conversation ? {
+          id: agentResult.conversation.id,
+          agentId: agentResult.conversation.agentId,
+          messages: agentResult.conversation.messages.map(msg => ({
+            role: msg.role,
+            content: Array.isArray(msg.content)
+              ? msg.content.map(part => {
+                  if (part.type === 'text') {
+                    return {
+                      type: 'text' as const,
+                      text: part.text
+                    }
+                  } else if (part.type === 'image_url') {
+                    return {
+                      type: 'image_url' as const,
+                      image_url: {
+                        url: part.image_url.url,
+                        detail: part.image_url.detail || 'auto'
+                      }
+                    }
+                  }
+                  return part
+                })
+              : msg.content,
+            timestamp: msg.timestamp
+          })),
+          metadata: {
+            createdAt: agentResult.conversation.metadata.createdAt,
+            updatedAt: agentResult.conversation.metadata.updatedAt,
+            turnCount: agentResult.conversation.metadata.turnCount
+          }
+        } : undefined,
+        latestMessage: agentResult.latestMessage ? {
+          role: agentResult.latestMessage.role,
+          content: agentResult.latestMessage.content,
+          timestamp: agentResult.latestMessage.timestamp
+        } : undefined,
+        error: agentResult.error
+      }
+    } catch (error) {
+      console.error('Error in runAgent:', error)
+      return { error: error instanceof Error ? error.message : 'Unknown error occurred' }
+    }
+  }
 }
 

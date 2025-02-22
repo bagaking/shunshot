@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { SystemSettings } from './settings/SystemSettings'
 import { AIModelSettings } from './settings/AIModelSettings'
+import { AgentSettings } from './settings/AgentSettings'
 
 const TabButton: React.FC<{
   active: boolean
@@ -20,7 +21,7 @@ const TabButton: React.FC<{
 )
 
 export const SettingsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'system' | 'aiModel'>('system')
+  const [activeTab, setActiveTab] = useState<'system' | 'aiModel' | 'agents'>('system')
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -48,6 +49,12 @@ export const SettingsPage: React.FC = () => {
               >
                 大模型设置
               </TabButton>
+              <TabButton
+                active={activeTab === 'agents'}
+                onClick={() => setActiveTab('agents')}
+              >
+                AI Agents
+              </TabButton>
             </nav>
           </div>
 
@@ -55,8 +62,10 @@ export const SettingsPage: React.FC = () => {
           <div className="px-4 py-5 sm:p-6">
             {activeTab === 'system' ? (
               <SystemSettings />
-            ) : (
+            ) : activeTab === 'aiModel' ? (
               <AIModelSettings />
+            ) : (
+              <AgentSettings />
             )}
           </div>
         </div>

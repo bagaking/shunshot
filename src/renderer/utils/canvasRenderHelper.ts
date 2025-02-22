@@ -1,5 +1,6 @@
-import { DisplayInfo, Rect, CaptureMode } from '../types/capture'
+import { DisplayInfo, Rect, CaptureMode } from '../../types/capture'
 import { translog } from './translog'
+import { Bounds, coordinates } from '../../common/2d'
 
 interface RenderConfig {
   canvas: HTMLCanvasElement
@@ -9,7 +10,7 @@ interface RenderConfig {
   selectedRect: Rect | null
   initialCanvasState: ImageData | null
   mode: CaptureMode
-  getBoundsFromRect: (rect: Rect) => { x: number; y: number; width: number; height: number }
+  getBoundsFromRect: (rect: Rect) => Bounds
   setInitialCanvasState: (state: ImageData) => void
   setCanvasInfo: (info: {
     width: number
@@ -120,7 +121,7 @@ export const canvasRenderHelper = {
   // 绘制选区边框和装饰
   drawSelectionBorder(
     ctx: CanvasRenderingContext2D,
-    bounds: { x: number; y: number; width: number; height: number },
+    bounds: Bounds,
     scale: number,
     mode: CaptureMode
   ) {
@@ -321,23 +322,47 @@ export const canvasRenderHelper = {
     } = config
 
     // 只在初始化或尺寸变化时设置画布尺寸
+    const devicePixelRatio = window.devicePixelRatio || 1
+    const displayToCanvasScale = displayInfo.scaleFactor / devicePixelRatio
+
     if (
       canvas.width !== displayInfo.bounds.width * displayInfo.scaleFactor ||
       canvas.height !== displayInfo.bounds.height * displayInfo.scaleFactor
     ) {
-      // 设置物理像素大小
-      canvas.width = displayInfo.bounds.width * displayInfo.scaleFactor
-      canvas.height = displayInfo.bounds.height * displayInfo.scaleFactor
+      // 设置物理像素大小 (设备空间)
+      const deviceSpaceSize = {
+        width: displayInfo.bounds.width * displayInfo.scaleFactor,
+        height: displayInfo.bounds.height * displayInfo.scaleFactor
+      }
+      canvas.width = deviceSpaceSize.width
+      canvas.height = deviceSpaceSize.height
       
-      // 设置 CSS 显示大小
-      canvas.style.width = `${displayInfo.bounds.width}px`
-      canvas.style.height = `${displayInfo.bounds.height}px`
+      // 设置 CSS 显示大小 (显示空间)
+      const displaySpaceSize = {
+        width: displayInfo.bounds.width,
+        height: displayInfo.bounds.height
+      }
+      canvas.style.width = `${displaySpaceSize.width}px`
+      canvas.style.height = `${displaySpaceSize.height}px`
 
-      // 初始绘制背景图 (使用物理像素大小)
-      ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height)
+      translog.debug('Canvas size initialization', {
+        displaySpace: displaySpaceSize,
+        deviceSpace: deviceSpaceSize,
+        scaling: {
+          devicePixelRatio,
+          displayToCanvasScale,
+          displayInfo: {
+            scaleFactor: displayInfo.scaleFactor,
+            bounds: displayInfo.bounds
+          }
+        }
+      })
+
+      // 初始绘制背景图 (使用设备空间尺寸)
+      ctx.drawImage(backgroundImage, 0, 0, deviceSpaceSize.width, deviceSpaceSize.height)
       
       // 保存初始状态
-      setInitialCanvasState(ctx.getImageData(0, 0, canvas.width, canvas.height))
+      setInitialCanvasState(ctx.getImageData(0, 0, deviceSpaceSize.width, deviceSpaceSize.height))
     }
 
     // 如果有初始状态，恢复它
@@ -355,21 +380,38 @@ export const canvasRenderHelper = {
 
     // 如果有选区,绘制选区
     if (selectedRect) {
-      const bounds = getBoundsFromRect(selectedRect)
-      const scale = displayInfo.scaleFactor
+      // 从 Canvas 空间转换到显示空间
+      const displaySpaceBounds = getBoundsFromRect(selectedRect)
+      
+      // 从显示空间转换到设备空间
+      const deviceSpaceBounds = coordinates.displayToDevice(
+        displaySpaceBounds,
+        displayInfo.scaleFactor
+      )
 
-      // 计算物理像素坐标
-      const physicalBounds = {
-        x: Math.round(bounds.x * scale),
-        y: Math.round(bounds.y * scale),
-        width: Math.round(bounds.width * scale),
-        height: Math.round(bounds.height * scale)
-      }
+      translog.debug('[Area Debug] Canvas rendering coordinate spaces', {
+        canvasSpace: selectedRect,
+        displaySpace: displaySpaceBounds,
+        deviceSpace: deviceSpaceBounds,
+        scaling: {
+          devicePixelRatio,
+          displayToCanvasScale,
+          displayInfo: {
+            scaleFactor: displayInfo.scaleFactor,
+            bounds: displayInfo.bounds
+          }
+        }
+      })
 
       // 清除选区内的遮罩,显示原图
       ctx.globalCompositeOperation = 'destination-out'
       ctx.fillStyle = 'rgba(0, 0, 0, 1)'
-      ctx.fillRect(physicalBounds.x, physicalBounds.y, physicalBounds.width, physicalBounds.height)
+      ctx.fillRect(
+        deviceSpaceBounds.x,
+        deviceSpaceBounds.y,
+        deviceSpaceBounds.width,
+        deviceSpaceBounds.height
+      )
       
       // 恢复正常绘制模式
       ctx.globalCompositeOperation = 'source-over'
@@ -380,15 +422,15 @@ export const canvasRenderHelper = {
           initialCanvasState,
           0,
           0,
-          physicalBounds.x,
-          physicalBounds.y,
-          physicalBounds.width,
-          physicalBounds.height
+          deviceSpaceBounds.x,
+          deviceSpaceBounds.y,
+          deviceSpaceBounds.width,
+          deviceSpaceBounds.height
         )
       }
       
-      // 使用新的边框绘制方法
-      this.drawSelectionBorder(ctx, physicalBounds, scale, mode)
+      // 使用设备空间坐标绘制边框
+      this.drawSelectionBorder(ctx, deviceSpaceBounds, displayInfo.scaleFactor, mode)
     }
 
     setCanvasInfo({
@@ -407,7 +449,7 @@ export const canvasRenderHelper = {
     })
   },
 
-  drawSizeLabel(ctx: CanvasRenderingContext2D, bounds: { x: number; y: number; width: number; height: number }) {
+  drawSizeLabel(ctx: CanvasRenderingContext2D, bounds: Bounds) {
     const label = `${bounds.width} x ${bounds.height}`
     
     ctx.font = '12px Arial'

@@ -1,5 +1,5 @@
 import React from 'react'
-import { CaptureData } from '../types/capture'
+import { CaptureData } from '../../types/capture'
 
 interface DebugPanelProps {
   backgroundImage: HTMLImageElement | null
@@ -39,7 +39,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   // 获取加载阶段
   const getLoadingPhase = () => {
     if (!captureData) return '等待截图数据'
-    if (!captureData.imageData.startsWith('data:image')) return '图片数据格式错误'
+    if (!captureData.imageBuffer || captureData.imageBuffer.length === 0) return '图片数据为空'
     if (!backgroundImage) return '图片加载中'
     if (!backgroundImage.complete) return '图片加载未完成'
     if (backgroundImage.naturalWidth === 0) return '图片尺寸无效'
@@ -84,14 +84,14 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
                 <>
                   <div className="flex justify-between">
                     <span>数据格式:</span>
-                    <span className={getStatusClass(captureData.imageData.startsWith('data:image'))}>
-                      {captureData.imageData.startsWith('data:image') ? '正确' : '错误'}
+                    <span className={getStatusClass(!!captureData.imageBuffer && captureData.imageBuffer.length > 0)}>
+                      {!!captureData.imageBuffer && captureData.imageBuffer.length > 0 ? '正确' : '错误'}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>数据长度:</span>
                     <span className="text-blue-400">
-                      {(captureData.imageData.length / 1024).toFixed(1)} KB
+                      {(captureData.imageBuffer.length / 1024).toFixed(1)} KB ({captureData.imageSize.width}x{captureData.imageSize.height})
                     </span>
                   </div>
                 </>

@@ -1,4 +1,4 @@
-import { Rect, CaptureBounds } from '../types/capture'
+import { Rect, CaptureBounds } from '../../types/capture'
 
 interface Position {
   left: number

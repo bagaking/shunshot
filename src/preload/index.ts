@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { SHUNSHOT_BRIDGE_PREFIX } from '../types/shunshotBridge'
-import { IShunshotCoreAPI } from '../types/electron'
+import { IShunshotCoreAPI } from '../types/shunshotapi'
 import { ITransLogAPI } from '../types/translog'
 
 // 创建安全的IPC包装器
@@ -27,6 +27,11 @@ const createSecureIPC = () => {
     `${SHUNSHOT_BRIDGE_PREFIX}:setPreference`,
     `${SHUNSHOT_BRIDGE_PREFIX}:setIgnoreSystemShortcuts`,
     `${SHUNSHOT_BRIDGE_PREFIX}:onCleanupComplete`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:getAgents`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:updateAgent`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:runAgent`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:createAgent`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:deleteAgent`,
   ]
 
   return {
@@ -134,6 +139,26 @@ const createCoreAPI = (secureIPC: ReturnType<typeof createSecureIPC>): IShunshot
       console.debug('[Preload] Invoking setIgnoreSystemShortcuts', { ignore })
       return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:setIgnoreSystemShortcuts`, ignore)
     },
+    getAgents: async () => {
+      console.debug('[Preload] Invoking getAgents')
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:getAgents`)
+    },
+    createAgent: async (agent) => {
+      console.debug('[Preload] Invoking createAgent', { id: agent.id })
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:createAgent`, agent)
+    },
+    deleteAgent: async (id) => {
+      console.debug('[Preload] Invoking deleteAgent', { id })
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:deleteAgent`, id)
+    },
+    updateAgent: async (id: string, config) => {
+      console.debug('[Preload] Invoking updateAgent', { id })
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:updateAgent`, id, config)
+    },
+    runAgent: async (id: string, options) => {
+      console.debug('[Preload] Invoking runAgent', { id })
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:runAgent`, id, options)
+    },
   }
 }
 
@@ -169,6 +194,16 @@ try {
     setWindowSize: async () => { throw new Error('API not available') },
     loadPlugin: async () => { throw new Error('API not available') },
     requestOCR: async () => ({ error: 'API not available' }),
+    openSettings: async () => { throw new Error('API not available') },
+    getPreference: async () => { throw new Error('API not available') },
+    setPreference: async () => { throw new Error('API not available') },
+    setIgnoreSystemShortcuts: async () => { throw new Error('API not available') },
+    onCleanupComplete: () => () => {},
+    getAgents: async () => { throw new Error('API not available') },
+    createAgent: async () => { throw new Error('API not available') },
+    deleteAgent: async () => { throw new Error('API not available') },
+    updateAgent: async () => { throw new Error('API not available') },
+    runAgent: async () => { throw new Error('API not available') },
   }
 
   contextBridge.exposeInMainWorld('translogAPI', {

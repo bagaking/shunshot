@@ -4,42 +4,42 @@
   <meta charset="UTF-8" />
   <title>设置 - Shunshot</title>
   <script>
-    console.debug('[SettingsWindow] Document loading started', {
-      timestamp: Date.now(),
-      url: window.location.href
-    });
-
-    // 监听 DOMContentLoaded 事件
-    document.addEventListener('DOMContentLoaded', () => {
-      console.debug('[SettingsWindow] DOMContentLoaded fired', {
+    console.debug('[SettingWindow] Document loading started',JSON.stringify({
         timestamp: Date.now(),
-        readyState: document.readyState
-      });
-    });
+        url: window.location.href
+      }));
 
-    // 监听 load 事件
-    window.addEventListener('load', () => {
-      console.debug('[SettingsWindow] Window load completed', {
-        timestamp: Date.now(),
-        readyState: document.readyState
+      // 监听 DOMContentLoaded 事件
+      document.addEventListener('DOMContentLoaded', () => {
+        console.debug('[SettingWindow] DOMContentLoaded fired',JSON.stringify({
+          timestamp: Date.now(),
+          readyState: document.readyState
+        }));
       });
-    });
 
-    // 监听错误
-    window.addEventListener('error', (event) => {
-      console.error('[SettingsWindow] Error occurred:', {
-        error: event.error,
-        message: event.message,
-        timestamp: Date.now()
+      // 监听 load 事件
+      window.addEventListener('load', () => {
+        console.debug('[SettingWindow] Window load completed',JSON.stringify({
+          timestamp: Date.now(),
+          readyState: document.readyState
+        }));
       });
-    });
 
-    window.addEventListener('unhandledrejection', (event) => {
-      console.error('[SettingsWindow] Unhandled promise rejection:', {
-        reason: event.reason,
-        timestamp: Date.now()
+      // 监听错误
+      window.addEventListener('error', (event) => {
+        console.error('[SettingWindow] Error occurred:',JSON.stringify({
+          error: event.error,
+          message: event.message,
+          timestamp: Date.now()
+        }));
       });
-    });
+
+      window.addEventListener('unhandledrejection', (event) => {
+        console.error('[SettingWindow] Unhandled promise rejection:',JSON.stringify({
+          reason: event.reason,
+          timestamp: Date.now()
+        }));
+      });
   </script>
 </head>
 <body>

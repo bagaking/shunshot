@@ -1,15 +1,17 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Point, Rect, DisplayInfo, CaptureBounds } from '../types/capture'
+import { DisplayInfo } from '../../types/capture'
 import { debugHelper } from '../utils/DebugHelper'
 import { translog } from '../utils/translog'
+import { Point, Rect, Bounds, coordinates } from '../../common/2d'
 
 interface UseCaptureProps {
   displayInfo: DisplayInfo | null
   onDisplayInfoChange: (info: DisplayInfo | null) => void
+  onComplete?: () => void
 }
 
-export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps) => {
+export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: UseCaptureProps) => {
   const navigate = useNavigate()
   const [isSelecting, setIsSelecting] = useState(false)
   const [startPoint, setStartPoint] = useState<Point | null>(null)
@@ -20,50 +22,50 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
   // 坐标限制
   const clampCoordinates = useCallback((x: number, y: number): Point => {
     if (!displayInfo) return { x, y }
-    return {
-      x: Math.max(0, Math.min(x, displayInfo.bounds.width)),
-      y: Math.max(0, Math.min(y, displayInfo.bounds.height))
-    }
+    return coordinates.clamp({ x, y }, displayInfo.bounds)
   }, [displayInfo])
 
   // 获取选区边界
-  const getBoundsFromRect = useCallback((rect: Rect): CaptureBounds => {
+  const getBoundsFromRect = useCallback((canvasSpaceRect: Rect): Bounds => {
     try {
-      const bounds = {
-        x: rect.width > 0 ? rect.startX : rect.startX + rect.width,
-        y: rect.height > 0 ? rect.startY : rect.startY + rect.height,
-        width: Math.abs(rect.width),
-        height: Math.abs(rect.height)
-      }
+      const displaySpaceBounds = coordinates.canvasToDisplay(canvasSpaceRect)
 
-      translog.debug('Calculated bounds', { bounds })
-      return bounds
+      translog.debug('Canvas to display space transformation', { 
+        canvasSpace: canvasSpaceRect,
+        displaySpace: displaySpaceBounds
+      })
+      
+      return displaySpaceBounds
     } catch (error) {
-      translog.error('Error calculating bounds:', error)
+      translog.error('Error calculating display space bounds:', error)
       return { x: 0, y: 0, width: 0, height: 0 }
     }
   }, [])
 
   // 完成截图
-  const completeCapture = useCallback(async (bounds: CaptureBounds) => {
-    translog.debug('Completing capture', { bounds })
-    
-    if (!displayInfo) {
-      translog.error('No display info available')
-      return
-    }
+  const completeCapture = useCallback(
+    async (bounds: Bounds) => {
+      if (!displayInfo) return
 
-    try {
-      const scaledBounds = getScaledBounds(bounds, displayInfo.scaleFactor)
-      await performCapture(scaledBounds)
-      await cleanupAndNavigate()
-    } catch (error) {
-      handleCaptureError(error)
-    }
-  }, [navigate, displayInfo])
+      try {
+        translog.debug('[Area Debug] Capture completion', {
+          bounds,
+          displayInfo
+        })
+
+        await performCapture(bounds)
+        await window.shunshotCoreAPI.copyToClipboard(bounds)
+        
+        onComplete?.()
+      } catch (error) {
+        translog.error('Failed to complete capture', error as Error)
+      }
+    },
+    [displayInfo, onComplete]
+  )
 
   // 获取缩放后的边界
-  const getScaledBounds = (bounds: CaptureBounds, scaleFactor: number) => ({
+  const getScaledBounds = (bounds: Bounds, scaleFactor: number) => ({
     x: Math.round(bounds.x * scaleFactor),
     y: Math.round(bounds.y * scaleFactor),
     width: Math.round(bounds.width * scaleFactor),
@@ -71,7 +73,7 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
   })
 
   // 执行截图
-  const performCapture = async (scaledBounds: CaptureBounds) => {
+  const performCapture = async (scaledBounds: Bounds) => {
     translog.debug('Scaled bounds calculated', { scaledBounds })
     await window.shunshotCoreAPI.hideWindow()
     await window.shunshotCoreAPI.copyToClipboard(scaledBounds)
@@ -114,6 +116,21 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
 
   // 处理快捷键
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    // 忽略来自输入框和聊天面板的事件
+    const target = event.target as HTMLElement
+    if (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.getAttribute('role') === 'textbox' ||
+      target.getAttribute('contenteditable') === 'true' ||
+      // 检查是否在聊天面板内
+      target.closest('.agent-panel') ||
+      // 检查是否是 antd mentions 组件
+      target.closest('.ant-mentions')
+    ) {
+      return
+    }
+
     logKeyEvent(event)
     handleKeyboardShortcuts(event)
   }, [selectedRect, getBoundsFromRect, completeCapture, cancelCapture])
@@ -229,9 +246,7 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
   })
 
   // OCR 处理
-  const handleOCR = useCallback(async (bounds: CaptureBounds): Promise<{text?: string, error?: any}> => {
-    translog.debug('Starting OCR', { bounds })
-    
+  const handleOCR = useCallback(async (displaySpaceBounds: Bounds): Promise<{text?: string, error?: any}> => {
     if (!displayInfo) {
       const error = 'No display info available'
       translog.error(error)
@@ -239,10 +254,16 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
     }
 
     try {
-      const scaledBounds = getScaledBounds(bounds, displayInfo.scaleFactor)
-      translog.debug('Scaled bounds calculated', { scaledBounds })
-      return await window.shunshotCoreAPI.requestOCR(scaledBounds)
+      translog.debug('OCR request coordinate spaces', {
+        displaySpace: {
+          bounds: displaySpaceBounds,
+          info: displayInfo
+        }
+      })
+
+      return await window.shunshotCoreAPI.requestOCR(displaySpaceBounds)
     } catch (error) {
+      translog.error('OCR request failed:', error)
       return { error }
     }
   }, [displayInfo])
@@ -250,32 +271,35 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
   // 鼠标事件处理
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     try {
-      const { x, y } = clampCoordinates(e.clientX, e.clientY)
-      console.debug('[renderer] Mouse down', { x, y })
+      const canvasSpacePoint = clampCoordinates(e.clientX, e.clientY)
+      translog.debug('Mouse down in canvas space', { 
+        canvasSpace: canvasSpacePoint,
+        rawClient: { x: e.clientX, y: e.clientY }
+      })
       
       setIsSelecting(true)
-      setStartPoint({ x, y })
+      setStartPoint(canvasSpacePoint)
       setSelectedRect(null)
     } catch (error) {
-      console.error('[renderer] Error during mouse down:', error)
+      translog.error('Error during mouse down:', error)
     }
   }, [clampCoordinates])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     try {
-      const { x, y } = clampCoordinates(e.clientX, e.clientY)
-      setMousePosition({ x, y })
+      const canvasSpacePoint = clampCoordinates(e.clientX, e.clientY)
+      setMousePosition(canvasSpacePoint)
       
       if (!isSelecting || !startPoint) return
 
-      updateSelection(x, y)
+      updateCanvasSpaceSelection(canvasSpacePoint.x, canvasSpacePoint.y)
     } catch (error) {
-      console.error('[renderer] Error during mouse move:', error)
+      translog.error('Error during mouse move:', error)
     }
   }, [isSelecting, startPoint, clampCoordinates])
 
   // 更新选区
-  const updateSelection = (x: number, y: number) => {
+  const updateCanvasSpaceSelection = (x: number, y: number) => {
     if (!startPoint) return
 
     const width = x - startPoint.x
@@ -283,11 +307,13 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange }: UseCaptureProps
 
     if (Math.abs(width) < 1 || Math.abs(height) < 1) return
 
-    console.debug('[renderer] Updating selection', {
-      startX: startPoint.x,
-      startY: startPoint.y,
-      width,
-      height
+    translog.debug('Updating canvas space selection', {
+      canvasSpace: {
+        start: startPoint,
+        current: { x, y },
+        width,
+        height
+      }
     })
 
     setSelectedRect({

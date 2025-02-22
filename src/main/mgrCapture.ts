@@ -3,7 +3,7 @@ import { join } from 'path'
 import { Logger } from './logger'
 import { mgrWindows } from './mgrWindows'
 import { SHUNSHOT_BRIDGE_PREFIX } from '../types/shunshotBridge'
-import { CaptureData } from '../renderer/types/capture'
+import { CaptureData } from '../types/capture'
 
 /**
  * 截图管理器
@@ -20,9 +20,7 @@ export class CaptureManager {
 
   // Update timeout constants
   private readonly WINDOW_CREATE_TIMEOUT = 5000; // 5 seconds
-  private readonly URL_LOAD_TIMEOUT = 3000; // 3 seconds
-  private readonly READY_SHOW_TIMEOUT = 3000; // 3 seconds
-  private readonly DATA_SEND_TIMEOUT = 2000; // 2 seconds
+  private readonly URL_LOAD_TIMEOUT = 3000; // 3 seconds 
   private readonly MAX_RETRIES = 2;
   private readonly RETRY_DELAY = 500; // 0.5 second
 
@@ -383,14 +381,17 @@ export class CaptureManager {
     focusedDisplay: Display
   ): Promise<void> {
     const operation = async () => {
-      const imageDataUrl = thumbnail.toDataURL()
+      // 获取原始图像数据
+      const imageBuffer = thumbnail.toBitmap()
+      const imageSize = thumbnail.getSize()
       
-      if (!imageDataUrl || !imageDataUrl.startsWith('data:image/') || imageDataUrl.length === 0) {
-        throw new Error('Invalid image data URL')
+      if (!imageBuffer || imageBuffer.length === 0) {
+        throw new Error('Invalid image buffer')
       }
 
       const captureData = {
-        imageData: imageDataUrl,
+        imageBuffer,
+        imageSize,
         displayInfo: {
           bounds: focusedDisplay.bounds,
           scaleFactor: focusedDisplay.scaleFactor
@@ -404,6 +405,7 @@ export class CaptureManager {
       // Send events to window
       captureWindow.webContents.send(`${SHUNSHOT_BRIDGE_PREFIX}:onStartCapture`)
       captureWindow.webContents.send(`${SHUNSHOT_BRIDGE_PREFIX}:onScreenCaptureData`, captureData)
+      Logger.info('[Perf] send to renderer')
     };
 
     return this.retryWithDelay(operation);
@@ -514,6 +516,16 @@ export class CaptureManager {
 
     } catch (error) {
       this.handleWindowCreationFailure(error as Error, captureWindow)
+    }
+  }
+
+  async startCapture() {
+    Logger.info('[Perf] capture start')
+    try {
+      await this.createCaptureWindow()
+    } catch (error) {
+      Logger.error('Failed to start capture', error as Error)
+      throw error
     }
   }
 }

@@ -1,5 +1,6 @@
 import Store from 'electron-store';
 import { Logger } from './logger';
+import { AgentConfig, DEFAULT_AGENTS } from '../types/agents';
 
 interface ModelConfig {
   apiKey: string;
@@ -20,6 +21,7 @@ interface AIModelPreference {
 export interface Preferences {
   system: SystemPreference;
   aiModel: AIModelPreference;
+  agents: AgentConfig[];
 }
 
 const SYSTEM_PREFERENCES: SystemPreference = {
@@ -42,7 +44,8 @@ const AI_MODEL_PREFERENCES: AIModelPreference = {
 
 const DEFAULT_PREFERENCES: Preferences = {
   system: SYSTEM_PREFERENCES,
-  aiModel: AI_MODEL_PREFERENCES 
+  aiModel: AI_MODEL_PREFERENCES,
+  agents: DEFAULT_AGENTS
 };
 
 export class PreferenceManager {

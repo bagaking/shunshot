@@ -1,6 +1,6 @@
 import { IpcMain, IpcRenderer } from 'electron'
 import { Bridge, IBridgeOptions } from '../common/bridge'
-import { IShunshotCoreAPI } from './electron'
+import { IShunshotCoreAPI } from './shunshotapi'
 
 export const SHUNSHOT_BRIDGE_PREFIX = "shunshot"
 export const SHUNSHOT_WINDOW_ID_PREFIX = SHUNSHOT_BRIDGE_PREFIX + "-window-"
@@ -53,6 +53,13 @@ export class ShunshotCoreBridge extends Bridge<IShunshotCoreAPI> {
 
       // 系统相关
       platform: process.platform,
+
+      // Agent 相关
+      getAgents: async () => [],
+      createAgent: async () => false,
+      deleteAgent: async () => false,
+      updateAgent: async () => false,
+      runAgent: async () => ({}),
 
       // 日志相关
       mainLog: {

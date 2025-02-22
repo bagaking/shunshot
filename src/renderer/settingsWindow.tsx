@@ -5,6 +5,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { SettingsPage } from './pages/Settings'
 import { debugHelper } from './utils/DebugHelper'
 import { translog } from './utils/translog'
+import 'antd/dist/reset.css'
 import './index.css'
 
 translog.debug('Settings window renderer starting...')
@@ -48,9 +49,7 @@ if (!root) {
   const startTime = performance.now()
   
   ReactDOM.createRoot(root).render(
-    <React.StrictMode>
-      <SettingsWrapper />
-    </React.StrictMode>
+    <SettingsWrapper />
   )
   
   const endTime = performance.now()
