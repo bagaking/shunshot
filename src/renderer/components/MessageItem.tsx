@@ -15,13 +15,13 @@ interface MessageItemProps {
 const getMessageBubbleStyle = (type: AgentRole): string => {
   switch (type) {
     case 'user':
-      return 'bg-blue-500 text-white prose-invert prose-headings:text-white prose-strong:text-white'
+      return 'bg-gradient-to-br from-blue-500 to-blue-600 text-white prose-invert prose-headings:text-white prose-strong:text-white shadow-sm'
     case 'system':
       return 'bg-gray-100 text-gray-600 prose-headings:text-gray-600 prose-strong:text-gray-600'
     case 'assistant':
-      return 'bg-white border border-gray-200 prose-headings:text-gray-700 prose-strong:text-gray-700'
+      return 'bg-white border border-gray-200 prose-headings:text-gray-700 prose-strong:text-gray-700 shadow-sm'
     default:
-      return 'bg-white border border-gray-200 prose-headings:text-gray-700 prose-strong:text-gray-700'
+      return 'bg-white border border-gray-200 prose-headings:text-gray-700 prose-strong:text-gray-700 shadow-sm'
   }
 }
 
@@ -84,35 +84,44 @@ export const MessageItem: React.FC<MessageItemProps> = React.memo(({ msg, agent,
       {/* Avatar section */}
       <div className="flex flex-col items-center">
         <Avatar 
-          className="w-10 h-10 flex items-center justify-center text-lg"
+          className={`w-10 h-10 flex items-center justify-center text-lg shadow-sm ${
+            msg.role === 'user' 
+              ? 'bg-blue-500 text-white' 
+              : 'bg-white border border-gray-200'
+          }`}
         >
           {msg.role === 'user' ? 'U' : msg.agent?.icon || agent?.icon}
         </Avatar>
       </div>
 
       {/* Message content section */}
-      <div className="flex flex-col max-w-[85%]">
-        {/* Name, description and timestamp */}
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-medium">
-            {msg.role === 'user' ? '你' : msg.agent?.name || agent?.name}
-          </span>
-          {msg.agent?.description && msg.role === 'assistant' && (
-            <span className="text-xs text-gray-500">
-              ({msg.agent.description})
-            </span>
-          )}
-          <span className="text-xs text-gray-500">
-            {dayjs(msg.timestamp).format('HH:mm')}
-          </span>
-        </div>
-
+      <div className="flex flex-col max-w-[85%] relative">
         {/* Message bubble with hover actions */}
-        <div className="group relative">
-          <div className={`px-4 py-2 rounded-lg ${getMessageBubbleStyle(msg.role)}`}>
+        <div className="group">
+          <div className={`px-4 py-3 rounded-2xl ${getMessageBubbleStyle(msg.role)}`}>
+            {/* Name and description */}
+            <div className="mb-2">
+              <div className="flex items-baseline gap-2">
+                {msg.role !== 'user' && (
+                  <>
+                    <span className="text-[15px] font-semibold text-gray-900">
+                      {msg.agent?.name || agent?.name}
+                    </span>
+                    {(msg.agent?.description || agent?.description) && (
+                      <span className="text-xs text-gray-500">
+                        {msg.agent?.description || agent?.description}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Message content */}
             {renderMessageContent(msg)}
           </div>
           
+          {/* Actions */}
           {msg.role !== 'user' && (
             <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button 
@@ -133,6 +142,13 @@ export const MessageItem: React.FC<MessageItemProps> = React.memo(({ msg, agent,
               )}
             </div>
           )}
+        </div>
+
+        {/* Timestamp */}
+        <div className={`text-xs text-gray-400 mt-1 ${
+          msg.role === 'user' ? 'text-right mr-1' : 'ml-1'
+        }`}>
+          {dayjs(msg.timestamp).format('HH:mm')}
         </div>
       </div>
     </div>
