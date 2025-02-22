@@ -24,8 +24,8 @@ mermaid.initialize({
   },
   sequence: {
     useMaxWidth: false,
-    width: 800,
-    height: 600,
+    // width: "100%,
+    // height: auto,
     actorMargin: 50,
     bottomMarginAdj: 20,
     messageMargin: 35,

@@ -36,7 +36,7 @@ export const BasePanel: React.FC<BasePanelProps> = ({
 
   return (
     <motion.div
-      className="agent-panel fixed backdrop-blur-sm bg-white/90 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] select-text"
+      className="agent-panel fixed bg-white/90 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] select-text"
       style={{
         left: position.x,
         top: position.y,
