@@ -92,21 +92,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [])
 
-  const content = (
-    <div className="flex flex-col rounded-2xl h-full" onClick={e => e.stopPropagation()}>
-      {/* Agent info header */}
-      {agent && (
-        <div className="flex items-center p-4 bg-transparent">
-          <div className="text-2xl mr-3 flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50/50 text-blue-500 shadow-sm">
-            {agent.icon}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-medium truncate text-gray-700">{agent.name}</div>
-            <div className="text-sm text-gray-500 truncate">{agent.description}</div>
-          </div>
-        </div>
-      )}
+  // Custom header content with agent info
+  const headerContent = agent && (
+    <div className="flex items-center space-x-3 min-w-0">
+      <div className="text-2xl flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-500">
+        {agent.icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium truncate text-gray-700">{agent.name}</div>
+        <div className="text-xs text-gray-500 truncate">{agent.description}</div>
+      </div>
+    </div>
+  )
 
+  const content = (
+    <div className="flex flex-col h-full" onClick={e => e.stopPropagation()}>
       {/* Message list */}
       <div 
         ref={chatContainerRef}
@@ -140,13 +140,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           loading={loading}
           agents={chatState.availableAgents}
           disabled={loading}
+          defaultAgent={agent}
         />
       )}
     </div>
   )
 
   return (
-    <BasePanel {...basePanelProps}>
+    <BasePanel {...basePanelProps} headerContent={headerContent}>
       <PanelErrorBoundary>
         <motion.div 
           className="h-full"

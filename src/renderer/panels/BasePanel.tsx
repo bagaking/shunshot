@@ -8,6 +8,7 @@ export interface BasePanelProps {
   position: Position
   size: Size
   title?: string
+  headerContent?: React.ReactNode
   isMinimized?: boolean
   onMove?: (id: string, position: Position) => void
   onResize?: (id: string, size: Size) => void
@@ -21,6 +22,7 @@ export const BasePanel: React.FC<BasePanelProps> = ({
   position,
   size,
   title = '',
+  headerContent,
   isMinimized = false,
   onMove,
   onResize,
@@ -36,7 +38,7 @@ export const BasePanel: React.FC<BasePanelProps> = ({
 
   return (
     <motion.div
-      className="agent-panel fixed bg-white/90 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] select-text"
+      className="agent-panel fixed bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] select-text overflow-hidden"
       style={{
         left: position.x,
         top: position.y,
@@ -84,10 +86,12 @@ export const BasePanel: React.FC<BasePanelProps> = ({
             dragControls.start(e)
           }}
         >
-          <h3 className="text-sm font-medium text-gray-700 truncate flex items-center">
-            <span className="w-2 h-2 rounded-full bg-blue-500 mr-2" />
-            {title}
-          </h3>
+          {headerContent || (
+            <h3 className="text-sm font-medium text-gray-700 truncate flex items-center">
+              <span className="w-2 h-2 rounded-full bg-blue-500 mr-2" />
+              {title}
+            </h3>
+          )}
           <div className="panel-controls flex items-center space-x-1">
             <motion.button
               className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-black/5 text-gray-500 transition-colors"

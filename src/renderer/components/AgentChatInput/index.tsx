@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { Button, Mentions, Tooltip, Popover } from 'antd'
 import { SendOutlined, LoadingOutlined, DatabaseOutlined, GlobalOutlined, PaperClipOutlined, UndoOutlined, BranchesOutlined } from '@ant-design/icons'
 import type { MentionsOptionProps } from 'antd/es/mentions'
@@ -11,6 +11,7 @@ export interface AgentChatInputProps {
   loading?: boolean
   agents: AgentConfig[]
   disabled?: boolean
+  defaultAgent?: AgentConfig
 }
 
 export interface SendOptions {
@@ -88,7 +89,7 @@ const AgentSelector: React.FC<{
         className="flex items-center space-x-1"
       >
         <span className="text-lg">{selectedAgent?.icon || '🤖'}</span>
-        <span>{selectedAgent?.name || '选择 Agent'}</span>
+        <span>{selectedAgent?.name || '切换 Agent'}</span>
       </Button>
     </Popover>
   )
@@ -125,16 +126,24 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
   onSend,
   loading = false,
   agents = [],
-  disabled = false
+  disabled = false,
+  defaultAgent
 }) => {
   // Input state with default agent
   const [state, setState] = useState<InputState>(() => ({
     message: '',
-    selectedAgent: agents.length > 0 ? agents[0] : undefined,
+    selectedAgent: defaultAgent || (agents.length > 0 ? agents[0] : undefined),
     useKnowledgeBase: false,
     useInternet: true,
     attachments: []
   }))
+
+  // Update selected agent when defaultAgent changes
+  useEffect(() => {
+    if (defaultAgent) {
+      setState(prev => ({ ...prev, selectedAgent: defaultAgent }))
+    }
+  }, [defaultAgent])
 
   // Refs
   const inputRef = useRef<any>(null)
@@ -182,7 +191,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
   }, [])
 
   return (
-    <div className="flex flex-col space-y-2 p-4 border-t border-gray-100 bg-white/50 backdrop-blur-sm">
+    <div className="flex flex-col space-y-2 p-4 border-t border-gray-100 bg-white">
       {/* Toolbar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
@@ -213,6 +222,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
             placeholder={`输入消息继续对话... 使用 @ 切换 Agent${loading ? ' (处理中...)' : ''}`}
             disabled={disabled || loading}
             agents={agents}
+            selectedAgent={state.selectedAgent}
           />
 
           {/* File upload button */}

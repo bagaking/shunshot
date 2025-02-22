@@ -7,7 +7,7 @@ import rehypeRaw from 'rehype-raw'
 import rehypeHighlight from 'rehype-highlight'
 import mermaid from 'mermaid'
 import type { Components } from 'react-markdown'
-import 'highlight.js/styles/github-dark.css'
+import 'highlight.js/styles/github.css'
 
 import { ChatCompletionContentPart } from '../../types/agents'
 

@@ -15,13 +15,13 @@ interface MessageItemProps {
 const getMessageBubbleStyle = (type: AgentRole): string => {
   switch (type) {
     case 'user':
-      return 'bg-blue-500 text-white prose-invert'
+      return 'bg-blue-500 text-white prose-invert prose-headings:text-white prose-strong:text-white'
     case 'system':
-      return 'bg-gray-100 text-gray-600'
+      return 'bg-gray-100 text-gray-600 prose-headings:text-gray-600 prose-strong:text-gray-600'
     case 'assistant':
-      return 'bg-white border border-gray-200'
+      return 'bg-white border border-gray-200 prose-headings:text-gray-700 prose-strong:text-gray-700'
     default:
-      return 'bg-white border border-gray-200'
+      return 'bg-white border border-gray-200 prose-headings:text-gray-700 prose-strong:text-gray-700'
   }
 }
 
@@ -64,7 +64,7 @@ export const MessageItem: React.FC<MessageItemProps> = React.memo(({ msg, agent,
                   <img 
                     src={part.image_url.url} 
                     alt="Content image"
-                    className="max-w-full h-auto rounded-lg"
+                    className="max-w-full max-h-[300px] w-auto h-auto object-contain rounded-lg"
                   />
                 </div>
               )

@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react'
+import React, { useRef, useCallback, useEffect } from 'react'
 import { Mention, MentionsInput, SuggestionDataItem } from 'react-mentions'
 import { AgentConfig } from '../../../types/agents'
 
@@ -9,6 +9,7 @@ interface MentionInputProps {
   placeholder?: string
   disabled?: boolean
   agents: AgentConfig[]
+  selectedAgent?: AgentConfig
   onMentionSelect?: (agentId: string) => void
 }
 
@@ -38,10 +39,16 @@ const mentionInputStyle = {
     backgroundColor: '#ffffff',
     border: '1px solid rgba(229, 231, 235, 1)',
     borderRadius: '0.75rem',
+    fontSize: '12px',
+    // padding: '0',
+    // margin: '0',
     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
     marginTop: '0.5rem',
     list: {
       backgroundColor: 'transparent',
+      padding: '0',
+      margin: '0',
+      borderRadius: '0.75rem',
     }
   },
 }
@@ -53,11 +60,19 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   placeholder,
   disabled,
   agents,
+  selectedAgent,
   onMentionSelect
 }) => {
   const inputRef = useRef<any>(null)
   const isComposing = useRef(false)
   const shouldSendOnCompositionEnd = useRef(false)
+
+  // Set initial mention if selectedAgent exists
+  useEffect(() => {
+    if (selectedAgent && onMentionSelect) {
+      onMentionSelect(selectedAgent.id)
+    }
+  }, [selectedAgent, onMentionSelect])
 
   const handleChange = useCallback((event: any, newValue: string, newPlainTextValue: string, mentions: any[]) => {
     onChange(newPlainTextValue)
@@ -112,7 +127,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
         style={mentionInputStyle}
         inputRef={inputRef}
         forceSuggestionsAboveCursor
-        a11ySuggestionsListLabel="选择 Agent"
+        a11ySuggestionsListLabel="切换 Agent"
       >
         <Mention
           trigger="@"
