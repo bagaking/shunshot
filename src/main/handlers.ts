@@ -346,22 +346,93 @@ export const handlers: IShunshotCoreAPI = {
   },
 
   runAgent: async (id, options: AgentRunOptions): Promise<AgentResult> => {
-    Logger.log('Received agent request')
+    console.log('Received agent request')
+    
     try {
-      const croppedImage = MakeImage(options.selectedBounds) 
-      if (!croppedImage) {
-        Logger.error({message: 'Failed to make image', data: { error: 'Failed to make image' }})
-        return { error: 'Failed to make image' }
+      // Get cropped image
+      const result = await MakeImage(options.selectedBounds)
+      if ('error' in result) {
+        return { error: result.error }
       }
-      if ('error' in croppedImage) {
-        Logger.error({message: 'Failed to make image', data: { error: croppedImage.error }})
-        return { error: croppedImage.error }
+
+      // Sanitize messages to ensure they are serializable
+      const sanitizedOptions = {
+        ...options,
+        parameters: options.parameters ? {
+          ...options.parameters,
+          messages: options.parameters.messages?.map(msg => ({
+            role: msg.role,
+            content: Array.isArray(msg.content) 
+              ? msg.content.map(part => {
+                  if (part.type === 'text') {
+                    return {
+                      type: 'text' as const,
+                      text: part.text
+                    }
+                  } else if (part.type === 'image_url') {
+                    return {
+                      type: 'image_url' as const,
+                      image_url: {
+                        url: part.image_url.url,
+                        detail: part.image_url.detail || 'auto'
+                      }
+                    }
+                  }
+                  return part
+                })
+              : msg.content,
+            timestamp: msg.timestamp
+          }))
+        } : undefined
       }
-      // 调用 agent
-      return await mgrAgents.runAgent(id, croppedImage, options)
+
+      // Run agent with sanitized options
+      const agentResult = await mgrAgents.runAgent(id, result, sanitizedOptions)
+
+      // Ensure the response is serializable
+      return {
+        conversation: agentResult.conversation ? {
+          id: agentResult.conversation.id,
+          agentId: agentResult.conversation.agentId,
+          messages: agentResult.conversation.messages.map(msg => ({
+            role: msg.role,
+            content: Array.isArray(msg.content)
+              ? msg.content.map(part => {
+                  if (part.type === 'text') {
+                    return {
+                      type: 'text' as const,
+                      text: part.text
+                    }
+                  } else if (part.type === 'image_url') {
+                    return {
+                      type: 'image_url' as const,
+                      image_url: {
+                        url: part.image_url.url,
+                        detail: part.image_url.detail || 'auto'
+                      }
+                    }
+                  }
+                  return part
+                })
+              : msg.content,
+            timestamp: msg.timestamp
+          })),
+          metadata: {
+            createdAt: agentResult.conversation.metadata.createdAt,
+            updatedAt: agentResult.conversation.metadata.updatedAt,
+            turnCount: agentResult.conversation.metadata.turnCount
+          }
+        } : undefined,
+        latestMessage: agentResult.latestMessage ? {
+          role: agentResult.latestMessage.role,
+          content: agentResult.latestMessage.content,
+          timestamp: agentResult.latestMessage.timestamp
+        } : undefined,
+        error: agentResult.error
+      }
     } catch (error) {
-      Logger.error('Failed to run agent:', error as Error)
-      return { error: 'Failed to run agent' }
+      console.error('Error in runAgent:', error)
+      return { error: error instanceof Error ? error.message : 'Unknown error occurred' }
     }
   }
 }

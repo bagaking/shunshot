@@ -213,7 +213,7 @@ class ConversationManager {
     return this.conversations.get(id)
   }
 
-  createConversation(agentId: string): Conversation {
+  createConversation(agentId: string, agent: AgentConfig, croppedImage: NativeImage): Conversation {
     if (this.conversations.size >= this.MAX_CONVERSATIONS) {
       this.cleanup()
     }
@@ -227,6 +227,40 @@ class ConversationManager {
         updatedAt: Date.now(),
         turnCount: 0
       }
+    }
+
+    // Add system prompt message
+    conversation.messages.push({
+      role: 'system',
+      content: agent.systemPrompt,
+      timestamp: Date.now()
+    })
+
+    try {
+      // Convert image to base64 and create message
+      const base64Image = croppedImage.toPNG().toString('base64')
+      const imageMessage: AgentMessage = {
+        role: 'user',
+        content: [
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/png;base64,${base64Image}`,
+            },
+          },
+          { 
+            type: 'text', 
+            text: '这张图片说了啥' 
+          },
+        ],
+        timestamp: Date.now()
+      }
+      
+      // Add message to conversation
+      conversation.messages.push(imageMessage)
+    } catch (error) {
+      Logger.error('Failed to process image:', error)
+      throw new AgentError('Failed to process image', 'IMAGE_PROCESSING_ERROR')
     }
 
     this.conversations.set(conversation.id, conversation)
@@ -279,63 +313,57 @@ class AgentRunner {
         throw new ConfigError(`Model name not configured: ${agent.modelConfig.id}`)
       }
 
+      if (!croppedImage) {
+        throw new AgentError('No image provided', 'NO_IMAGE_PROVIDED')
+      }
+
+      if (!image.meetsMinimumSize(croppedImage)) {
+        throw new AgentError('Image is too small', 'INVALID_IMAGE')
+      }
+
       // Get or create conversation
       let conversation = options.conversationId ? 
         this.conversationManager.getConversation(options.conversationId) :
-        this.conversationManager.createConversation(id)
-
-      if (!conversation) {
-        conversation = this.conversationManager.createConversation(id)
-        // Only add system message for new conversations
-        conversation.messages.push({
-          role: 'system',
-          content: agent.systemPrompt,
-        })
-      }
-
-      // Process image if provided
-      if (croppedImage) {
-        if (!image.meetsMinimumSize(croppedImage)) {
-          throw new AgentError('Image is too small', 'INVALID_IMAGE')
-        }
-
-        const base64Image = croppedImage.toPNG().toString('base64')
-        conversation.messages.push({
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/png;base64,${base64Image}`,
-              },
-            },
-            { 
-              type: 'text', 
-              text: '这张图片说了啥' 
-            },
-          ],
-          timestamp: Date.now()
-        })
-      }
+        this.conversationManager.createConversation(id, agent, croppedImage)
 
       // Add user messages from parameters
       if (options.parameters?.messages) {
-        conversation.messages.push(
-          ...options.parameters.messages.map(m => ({
-            ...m,
+        const userMessages = options.parameters.messages.map(m => ({
+          role: m.role,
+          content: m.content,
+          timestamp: Date.now()
+        }))
+        conversation.messages.push(...userMessages)
+
+        Logger.debug({
+          message: 'Conversation state after adding messages',
+          data: {
+            conversationId: conversation.id,
+            totalMessages: conversation.messages.length,
+            newMessagesCount: userMessages.length,
+            latestMessageRole: userMessages[userMessages.length - 1]?.role,
             timestamp: Date.now()
-          }))
-        )
+          }
+        })
       }
 
       // Save conversation state with user messages
       this.conversationManager.updateConversation(conversation.id, conversation)
 
-      // Format messages for OpenAI API
+      // Format messages for OpenAI API - only send necessary data
       const formattedMessages = conversation.messages.map(msg => ({
         role: msg.role,
         content: Array.isArray(msg.content) ? msg.content : msg.content
       }))
+
+      Logger.debug({
+        message: 'Sending messages to OpenAI',
+        data: {
+          messageCount: formattedMessages.length,
+          model: modelConfig.modelName,
+          conversationId: conversation.id
+        }
+      })
 
       // Call OpenAI with conversation history
       const response = await openai.chat.completions.create({
@@ -347,29 +375,52 @@ class AgentRunner {
 
       // Add assistant response
       const assistantMessage: AgentMessage = {
-        role: 'assistant',
+        role: 'assistant' as const,
         content: response.choices[0]?.message?.content || '',
         timestamp: Date.now()
       }
       conversation.messages.push(assistantMessage)
 
-      // Update conversation
+      Logger.debug({
+        message: 'Received assistant response',
+        data: {
+          conversationId: conversation.id,
+          totalMessages: conversation.messages.length,
+          responseLength: assistantMessage.content.length,
+          timestamp: Date.now()
+        }
+      })
+
+      // Update conversation metadata
       conversation.metadata.updatedAt = Date.now()
       conversation.metadata.turnCount++
       this.conversationManager.updateConversation(conversation.id, conversation)
 
+      // Return only necessary data
       return {
-        conversation,
+        conversation: {
+          id: conversation.id,
+          agentId: conversation.agentId,
+          messages: conversation.messages.map(msg => ({
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp
+          })),
+          metadata: {
+            createdAt: conversation.metadata.createdAt,
+            updatedAt: conversation.metadata.updatedAt,
+            turnCount: conversation.metadata.turnCount
+          }
+        },
         latestMessage: assistantMessage
       }
 
     } catch (error) {
       Logger.error('Failed to run agent:', error)
-      const conversation = options.conversationId ? 
-        this.conversationManager.getConversation(options.conversationId) :
-        this.conversationManager.createConversation(id)
       return {
-        conversation,
+        conversation: options.conversationId ? 
+          this.conversationManager.getConversation(options.conversationId) :
+          undefined,
         error: error instanceof Error ? error.message : String(error)
       }
     }

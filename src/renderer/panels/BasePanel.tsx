@@ -34,20 +34,22 @@ export const BasePanel: React.FC<BasePanelProps> = ({
 
   return (
     <motion.div
-      className="agent-panel fixed bg-white rounded-lg shadow-lg select-text"
+      className="agent-panel fixed backdrop-blur-sm bg-white/90 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] select-text"
       style={{
         left: position.x,
         top: position.y,
         width: size.width,
-        height: isMinimized ? 40 : size.height,
+        height: isMinimized ? 48 : size.height,
         zIndex: 1000,
       }}
       drag
-      dragElastic={0}
+      dragElastic={0.3}
       dragMomentum={false}
       dragTransition={{
-        power: 0,
-        timeConstant: 0
+        power: 0.2,
+        timeConstant: 200,
+        bounceStiffness: 200,
+        bounceDamping: 20
       }}
       onDragEnd={(_, info) => {
         onMove?.(id, {
@@ -55,48 +57,65 @@ export const BasePanel: React.FC<BasePanelProps> = ({
           y: position.y + info.offset.y
         })
       }}
+      initial={false}
       animate={{
-        height: isMinimized ? 40 : size.height,
-        scale: isMinimized ? 0.95 : 1,
+        height: isMinimized ? 48 : size.height,
+        scale: isMinimized ? 0.98 : 1,
+        y: isMinimized ? position.y + 4 : position.y
       }}
       transition={{ 
-        duration: 0.2,
-        ease: 'easeInOut'
+        type: "spring",
+        stiffness: 300,
+        damping: 30
       }}
       onClick={handlePanelClick}
       onKeyDown={e => e.stopPropagation()}
+      whileHover={{ scale: 1.002 }}
     >
       <div className="flex flex-col h-full">
         <div 
-          className="panel-header flex-none h-10 px-3 flex items-center justify-between bg-gray-50 border-b border-gray-200"
+          className="panel-header flex-none h-12 px-4 flex items-center justify-between bg-transparent"
           style={{ cursor: 'move' }}
         >
-          <h3 className="text-sm font-medium text-gray-700 truncate">{title}</h3>
+          <h3 className="text-sm font-medium text-gray-700 truncate flex items-center">
+            <span className="w-2 h-2 rounded-full bg-blue-500 mr-2" />
+            {title}
+          </h3>
           <div className="panel-controls flex items-center space-x-1">
-            <button
-              className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 text-gray-600 transition-colors"
+            <motion.button
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-black/5 text-gray-500 transition-colors"
               onClick={(e) => {
                 e.stopPropagation()
                 onMinimize?.(id)
               }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               {isMinimized ? <BorderOutlined /> : <MinusOutlined />}
-            </button>
-            <button
-              className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 text-gray-600 transition-colors"
+            </motion.button>
+            <motion.button
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-500 transition-colors"
               onClick={(e) => {
                 e.stopPropagation()
                 onClose?.(id)
               }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               <CloseOutlined />
-            </button>
+            </motion.button>
           </div>
         </div>
         {!isMinimized && (
-          <div className="panel-content flex-1 overflow-hidden">
+          <motion.div 
+            className="panel-content flex-1 overflow-hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
             {children}
-          </div>
+          </motion.div>
         )}
       </div>
     </motion.div>

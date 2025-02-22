@@ -1,18 +1,21 @@
 import React from 'react'
-import { Button } from 'antd'
-import { CopyOutlined } from '@ant-design/icons'
+import { Button, Avatar } from 'antd'
+import { CopyOutlined, EditOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
 import { AgentConfig, AgentMessage, AgentRole, ChatCompletionContentPart } from '../../types/agents'
+import { CodeBlockRenderer, getMessageString } from './CodeBlockRenderer'
 
 interface MessageItemProps {
-  msg: AgentMessage
+  msg: AgentMessage & { id?: string }
   agent?: AgentConfig
   onCopy: (content: string) => void
+  onEdit?: (messageId: string) => void
 }
 
 const getMessageBubbleStyle = (type: AgentRole): string => {
   switch (type) {
     case 'user':
-      return 'bg-blue-500 text-white'
+      return 'bg-blue-500 text-white prose-invert'
     case 'system':
       return 'bg-gray-100 text-gray-600'
     case 'assistant':
@@ -22,24 +25,12 @@ const getMessageBubbleStyle = (type: AgentRole): string => {
   }
 }
 
-// 将消息内容转换为字符串用于复制
-const getMessageString = (content: string | ChatCompletionContentPart[]): string => {
-  if (typeof content === 'string') {
-    return content
-  }
-  return content
-    .filter(part => part.type === 'text')
-    .map(part => (part as { text: string }).text)
-    .join('\n')
-}
-
-export const MessageItem = React.memo(({ msg, agent, onCopy }: MessageItemProps) => {
-  // 不显示 system 消息
+export const MessageItem: React.FC<MessageItemProps> = React.memo(({ msg, agent, onCopy, onEdit }) => {
   if (msg.role === 'system') {
     return null
   }
 
-  const renderMessageContent = (msg: MessageItemProps['msg']) => {
+  const renderMessageContent = (msg: AgentMessage): React.ReactNode => {
     if (msg.error) {
       return (
         <div className="flex flex-col gap-2">
@@ -48,23 +39,23 @@ export const MessageItem = React.memo(({ msg, agent, onCopy }: MessageItemProps)
             {msg.error}
           </div>
           {msg.content && (
-            <div className="text-gray-500 whitespace-pre-wrap break-words">
-              {typeof msg.content === 'string' ? msg.content : getMessageString(msg.content)}
+            <div className="prose prose-sm dark:prose-invert max-w-none text-gray-500">
+              <CodeBlockRenderer content={msg.content} />
             </div>
           )}
         </div>
       )
     }
 
-    // 处理数组格式的消息内容
+    // Handle array format message content
     if (Array.isArray(msg.content)) {
       return (
         <div className="space-y-2">
           {msg.content.map((part, index) => {
             if (part.type === 'text') {
               return (
-                <div key={index} className="whitespace-pre-wrap break-words">
-                  {part.text}
+                <div key={index} className="prose prose-sm dark:prose-invert max-w-none">
+                  <CodeBlockRenderer content={part.text} />
                 </div>
               )
             } else if (part.type === 'image_url') {
@@ -80,45 +71,71 @@ export const MessageItem = React.memo(({ msg, agent, onCopy }: MessageItemProps)
             }
             return null
           })}
-          {msg.role !== 'user' && (
-            <Button
-              type="text"
-              size="small"
-              icon={<CopyOutlined />}
-              onClick={() => onCopy(getMessageString(msg.content))}
-            >
-              复制
-            </Button>
-          )}
         </div>
       )
     }
 
-    // 处理字符串格式的消息
-    return (
-      <div className="space-y-2">
-        <div className="whitespace-pre-wrap break-words">{msg.content}</div>
-        {msg.role !== 'user' && (
-          <Button
-            type="text"
-            size="small"
-            icon={<CopyOutlined />}
-            onClick={() => onCopy(msg.content as string)}
-          >
-            复制
-          </Button>
-        )}
-      </div>
-    )
+    // Handle string format message
+    return <CodeBlockRenderer content={msg.content} />
   }
 
   return (
-    <div className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-      <div className={`px-4 py-2 rounded-lg max-w-[85%] ${getMessageBubbleStyle(msg.role)}`}>
-        {renderMessageContent(msg)}
+    <div className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+      {/* Avatar section */}
+      <div className="flex flex-col items-center">
+        <Avatar 
+          src={msg.role === 'user' ? undefined : agent?.icon}
+          className="w-10 h-10"
+        >
+          {msg.role === 'user' ? 'U' : agent?.name?.[0]}
+        </Avatar>
+      </div>
+
+      {/* Message content section */}
+      <div className="flex flex-col max-w-[85%]">
+        {/* Name, description and timestamp */}
+        <div className="flex items-center gap-2 mb-1">
+          <span className="font-medium">
+            {msg.role === 'user' ? '你' : agent?.name || 'Assistant'}
+          </span>
+          {agent?.description && msg.role === 'assistant' && (
+            <span className="text-xs text-gray-500">
+              ({agent.description})
+            </span>
+          )}
+          <span className="text-xs text-gray-500">
+            {dayjs(msg.timestamp).format('HH:mm')}
+          </span>
+        </div>
+
+        {/* Message bubble with hover actions */}
+        <div className="group relative">
+          <div className={`px-4 py-2 rounded-lg ${getMessageBubbleStyle(msg.role)}`}>
+            {renderMessageContent(msg)}
+          </div>
+          
+          {msg.role !== 'user' && (
+            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button 
+                type="text"
+                size="small"
+                icon={<CopyOutlined />}
+                title="复制"
+                onClick={() => onCopy(typeof msg.content === 'string' ? msg.content : getMessageString(msg.content))}
+              />
+              {onEdit && msg.id && (
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  title="编辑"
+                  onClick={() => onEdit(msg.id!)}
+                />
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
 })
-
-MessageItem.displayName = 'MessageItem' 

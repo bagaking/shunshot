@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { AgentConfig, AgentMessage } from '../../types/agents'
+import { AgentConfig, AgentMessage, ChatCompletionContentPart } from '../../types/agents'
 import { Bounds } from '../../common/2d'
 import { message as antdMessage } from 'antd' 
 import { usePanelManager } from '../panels/PanelManager' 
 import { translog } from '../utils/translog'
 import { Square, Circle, Pencil, Grid } from 'lucide-react'
 import { EditOutlined, FileSearchOutlined, VideoCameraOutlined, CameraOutlined, RobotOutlined, CloseOutlined, CheckOutlined } from '@ant-design/icons'
+import { MessageService } from '../services/messageService'
 
 interface ToolBarProps {
   onConfirm: () => void
@@ -140,7 +141,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
     try {
       setIsProcessing(true)
       
-      // Get agent config
+      // 获取 agent 配置
       const agentList = await window.shunshotCoreAPI.getAgents()
       const selectedAgent = agentList.find(a => a.id === agentId)
       
@@ -149,7 +150,9 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         return
       }
 
-      // Create panel with loading state
+      const messageService = new MessageService(panelManager, selectedBounds)
+
+      // 创建面板
       const panelId = panelManager.createPanel({
         type: 'chat',
         position: { x: 100, y: 100 },
@@ -157,115 +160,31 @@ export const ToolBar: React.FC<ToolBarProps> = ({
           messages: [],
           title: selectedAgent.name,
           agent: selectedAgent,
-          availableAgents: agentList,
           loading: true,
-          onSend: async (message: string, targetAgentId?: string) => {
-            const panel = panelManager.getPanelState(panelId)
-            if (!panel) return
-
-            try {
-              // Update loading state
-              panelManager.updatePanel(panelId, {
-                contentProps: {
-                  ...panel.contentProps,
-                  loading: true
-                }
-              })
-
-              // Add user message immediately
-              const userMessage: AgentMessage = {
-                role: 'user',
-                content: [{ 
-                  type: 'text',
-                  text: message 
-                }],
-                timestamp: Date.now()
-              }
-
-              // Update panel with new message
-              const currentMessages = [...(panel.contentProps.messages || []), userMessage]
-              panelManager.updatePanel(panelId, {
-                contentProps: {
-                  ...panel.contentProps,
-                  messages: currentMessages
-                }
-              })
-
-              // Run agent with conversation context
-              const result = await window.shunshotCoreAPI.runAgent(
-                targetAgentId || agentId,
-                {
-                  selectedBounds,
-                  conversationId: panel.contentProps.conversationId,
-                  parameters: {
-                    messages: [userMessage]
-                  }
-                }
-              )
-
-              // Update panel with conversation
-              if (result.conversation) {
-                // Keep local messages if something went wrong
-                const messages = result.error ? currentMessages : result.conversation.messages
-
-                panelManager.updatePanel(panelId, {
-                  contentProps: {
-                    ...panel.contentProps,
-                    conversationId: result.conversation.id,
-                    messages,
-                    loading: false,
-                    // If agent was switched, update the agent info
-                    ...(targetAgentId && targetAgentId !== agentId ? {
-                      agent: agentList.find(a => a.id === targetAgentId),
-                      title: agentList.find(a => a.id === targetAgentId)?.name || 'Chat'
-                    } : {})
-                  }
-                })
-              }
-
-              if (result.error) {
-                antdMessage.error(result.error)
-              }
-
-            } catch (error) {
-              translog.error('Failed to process message', error)
-              antdMessage.error('消息处理失败')
-              panelManager.updatePanel(panelId, {
-                contentProps: {
-                  ...panel.contentProps,
-                  loading: false
-                }
-              })
-            }
+          getAvailableAgents: () => window.shunshotCoreAPI.getAgents(),
+          onSend: (message: string, targetAgentId?: string) => {
+            return messageService.handleMessage(
+              panelId,
+              message,
+              selectedAgent,
+              targetAgentId
+            )
           }
         }
       })
 
-      // Initial agent run to start conversation
-      const result = await window.shunshotCoreAPI.runAgent(
-        agentId,
-        {
-          selectedBounds,
-          parameters: {} // Remove initial message since it's handled by mgrAgents
-        }
+      // 初始化对话
+      const initialState = await messageService.initializeConversation(
+        panelId,
+        agentId, 
+        selectedAgent, 
+        agentList
       )
 
-      // Update panel with conversation
-      if (result.conversation) {
+      if (initialState) {
         panelManager.updatePanel(panelId, {
-          contentProps: {
-            messages: result.conversation.messages,
-            title: selectedAgent.name,
-            agent: selectedAgent,
-            availableAgents: agentList,
-            conversationId: result.conversation.id,
-            loading: false
-          }
+          contentProps: initialState
         })
-      }
-
-      if (result.error) {
-        antdMessage.error(result.error)
       }
 
     } catch (error) {

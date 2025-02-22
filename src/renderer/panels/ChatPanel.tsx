@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { BasePanel, BasePanelProps } from './BasePanel'
-import { Button, List, message, Mentions } from 'antd'
+import { Button, message, Mentions } from 'antd'
+import type { MentionsOptionProps } from 'antd/es/mentions'
 import { SendOutlined, LoadingOutlined, RobotOutlined } from '@ant-design/icons'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AgentConfig, AgentMessage } from '../../types/agents'
@@ -14,13 +15,13 @@ interface ChatPanelProps extends Omit<BasePanelProps, 'children'> {
   onSend?: (message: string, targetAgentId?: string) => Promise<void>
   loading?: boolean
   agent?: AgentConfig
-  availableAgents?: AgentConfig[]
+  getAvailableAgents?: () => Promise<AgentConfig[]>
 }
 
 interface ChatState {
   input: string
-  selectedAgent?: string
   error?: string
+  availableAgents: AgentConfig[]
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -28,14 +29,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   onSend,
   loading,
   agent,
-  availableAgents = [],
+  getAvailableAgents,
   ...basePanelProps
 }) => {
+  translog.debug('ChatPanel render', {
+    messageCount: messages.length,
+    hasAgent: !!agent,
+    agentId: agent?.id,
+    loading
+  })
+
   // 状态管理优化：合并相关状态
   const [chatState, setChatState] = useState<ChatState>({
     input: '',
-    selectedAgent: agent?.id,
-    error: undefined
+    error: undefined,
+    availableAgents: []
   })
   const [isExpanded, setIsExpanded] = useState(true)
   
@@ -65,12 +73,20 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   useEffect(() => {
     // 当有消息或 agent 信息时保持展开
     if ((messages?.length ?? 0) > 0 || agent) {
+      translog.debug('Expanding chat panel', {
+        messageCount: messages.length,
+        hasAgent: !!agent
+      })
       setIsExpanded(true)
     }
   }, [messages, agent])
 
   useEffect(() => {
     if (isExpanded) {
+      translog.debug('Scrolling to bottom', {
+        messageCount: messages.length,
+        isExpanded
+      })
       scrollToBottom()
     }
   }, [messages, isExpanded, scrollToBottom])
@@ -83,6 +99,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [])
 
+  // 加载可用的 agents
+  useEffect(() => {
+    if (getAvailableAgents) {
+      getAvailableAgents().then(agents => {
+        setChatState(prev => ({ ...prev, availableAgents: agents }))
+      }).catch(error => {
+        translog.error('Failed to load available agents:', error)
+      })
+    }
+  }, [getAvailableAgents])
+
   // 处理@提及和消息发送
   const handleSend = useCallback(async (e?: React.KeyboardEvent) => {
     try {
@@ -90,7 +117,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         preventEventBubbling(e)
       }
       
-      const { input } = chatState
+      const { input, availableAgents } = chatState
       if (!input.trim() || !onSend) return
 
       // 解析@提及
@@ -122,7 +149,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       }))
       message.error('发送消息失败')
     }
-  }, [chatState, onSend, preventEventBubbling, agent, availableAgents])
+  }, [chatState, onSend, preventEventBubbling, agent])
 
   const handleCopy = useCallback(async (content: string) => {
     try {
@@ -146,22 +173,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   }, [])
 
   // 优化：使用 useMemo 缓存 agent 选项
-  const agentOptions = useMemo(() => availableAgents.map(agent => ({
+  const agentOptions = useMemo(() => chatState.availableAgents.map(agent => ({
     value: agent.id,
     label: `${agent.icon} ${agent.name}`,
     key: agent.id
-  })), [availableAgents])
+  })), [chatState.availableAgents])
 
   const content = (
     <div className="flex flex-col h-full" onClick={preventEventBubbling}>
       {/* Agent 信息头部 */}
       {agent && (
-        <div className="flex items-center p-4 border-b border-gray-200 bg-gray-50">
-          <div className="text-2xl mr-3 flex items-center justify-center w-10 h-10 rounded-lg bg-blue-50 text-blue-500">
+        <div className="flex items-center p-4 bg-transparent">
+          <div className="text-2xl mr-3 flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50/50 text-blue-500 backdrop-blur-sm shadow-sm">
             {agent.icon}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-medium truncate">{agent.name}</div>
+            <div className="font-medium truncate text-gray-700">{agent.name}</div>
             <div className="text-sm text-gray-500 truncate">{agent.description}</div>
           </div>
         </div>
@@ -170,17 +197,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       {/* 消息列表区域 */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4"
+        className="flex-1 overflow-y-auto px-4 py-2 space-y-4"
         style={{ minHeight: 0 }}
       >
         <AnimatePresence mode="popLayout">
           {messages.map((msg, index) => (
             <motion.div
               key={`${msg.timestamp}-${index}`}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
             >
               <MessageItem
                 msg={msg}
@@ -195,14 +222,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
       {/* 错误提示 */}
       {chatState.error && (
-        <div className="px-4 py-2 bg-red-50 border-t border-red-200">
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 10 }}
+          className="px-4 py-3 bg-red-50/50 backdrop-blur-sm border-t border-red-100"
+        >
           <div className="text-red-500 text-sm">{chatState.error}</div>
-        </div>
+        </motion.div>
       )}
 
       {/* 输入区域 */}
       {onSend && (
-        <div className="flex-none p-4 border-t border-gray-200 bg-white">
+        <div className="flex-none p-4 border-t border-gray-100 bg-white/50 backdrop-blur-sm">
           <div className="flex space-x-2">
             <Mentions
               ref={inputRef}
@@ -212,22 +244,50 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               placeholder={`输入消息继续对话... 使用 @ 切换 Agent${loading ? ' (处理中...)' : ''}`}
               disabled={loading}
               autoSize={{ minRows: 1, maxRows: 4 }}
-              className="flex-1"
-              options={agentOptions}
+              className="flex-1 !rounded-xl !border-gray-200 hover:!border-gray-300 focus:!border-blue-400 transition-colors"
               onClick={preventEventBubbling}
               onFocus={preventEventBubbling}
               onBlur={preventEventBubbling}
               prefix="@"
               split=" "
-            />
-            <Button
-              type="primary"
+              placement="top"
+              dropdownClassName="rounded-xl shadow-lg border-gray-200/50 backdrop-blur-sm bg-white/90"
+              filterOption={(input: string, option: MentionsOptionProps) => {
+                if (!option) return false
+                const optionValue = String(option.value || '').toLowerCase()
+                const optionLabel = String(option.label || '').toLowerCase()
+                const searchValue = input.toLowerCase()
+                return optionValue.includes(searchValue) || optionLabel.includes(searchValue)
+              }}
+              notFoundContent={
+                <div className="text-center py-3 text-gray-500">
+                  没有找到匹配的 Agent
+                </div>
+              }
+            >
+              {chatState.availableAgents.map(agent => (
+                <Mentions.Option key={agent.id} value={agent.id}>
+                  <div className="flex items-center space-x-2 py-1">
+                    <span className="text-lg">{agent.icon}</span>
+                    <span className="font-medium">{agent.name}</span>
+                  </div>
+                </Mentions.Option>
+              ))}
+            </Mentions>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className={`px-4 h-[34px] rounded-xl flex items-center justify-center transition-colors ${
+                loading || !chatState.input.trim() 
+                  ? 'bg-gray-100 text-gray-400' 
+                  : 'bg-blue-500 hover:bg-blue-600 text-white'
+              }`}
               onClick={() => handleSend()}
-              icon={loading ? <LoadingOutlined /> : <SendOutlined />}
               disabled={loading || !chatState.input.trim()}
             >
-              发送
-            </Button>
+              {loading ? <LoadingOutlined /> : <SendOutlined />}
+              <span className="ml-1">发送</span>
+            </motion.button>
           </div>
         </div>
       )}

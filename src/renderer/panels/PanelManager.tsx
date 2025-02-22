@@ -206,7 +206,7 @@ export const PanelManagerProvider: React.FC<PanelManagerProviderProps> = ({ chil
             title = 'Chat',
             loading = false,
             agent = null,
-            availableAgents = []
+            getAvailableAgents = () => window.shunshotCoreAPI.getAgents()
           } = panel.contentProps
 
           // 确保 position 有效
@@ -244,7 +244,7 @@ export const PanelManagerProvider: React.FC<PanelManagerProviderProps> = ({ chil
               isMinimized={panel.isMinimized}
               loading={loading}
               agent={agent}
-              availableAgents={availableAgents}
+              getAvailableAgents={getAvailableAgents}
             />
           )
         } catch (error) {
