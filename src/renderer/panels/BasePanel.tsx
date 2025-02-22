@@ -1,6 +1,6 @@
 import React from 'react'
 import { Position, Size } from '../../types/panel'
-import { motion } from 'framer-motion'
+import { motion, useDragControls } from 'framer-motion'
 import { MinusOutlined, BorderOutlined, CloseOutlined } from '@ant-design/icons'
 
 export interface BasePanelProps {
@@ -28,6 +28,8 @@ export const BasePanel: React.FC<BasePanelProps> = ({
   onClose,
   children
 }) => {
+  const dragControls = useDragControls()
+  
   const handlePanelClick = (e: React.MouseEvent) => {
     e.stopPropagation()
   }
@@ -43,6 +45,8 @@ export const BasePanel: React.FC<BasePanelProps> = ({
         zIndex: 1000,
       }}
       drag
+      dragControls={dragControls}
+      dragListener={false}
       dragElastic={0.3}
       dragMomentum={false}
       dragTransition={{
@@ -74,8 +78,11 @@ export const BasePanel: React.FC<BasePanelProps> = ({
     >
       <div className="flex flex-col h-full">
         <div 
-          className="panel-header flex-none h-12 px-4 flex items-center justify-between bg-transparent"
-          style={{ cursor: 'move' }}
+          className="panel-header flex-none h-12 px-4 flex items-center justify-between bg-transparent cursor-grab active:cursor-grabbing select-none"
+          onPointerDown={(e) => {
+            e.preventDefault()
+            dragControls.start(e)
+          }}
         >
           <h3 className="text-sm font-medium text-gray-700 truncate flex items-center">
             <span className="w-2 h-2 rounded-full bg-blue-500 mr-2" />
