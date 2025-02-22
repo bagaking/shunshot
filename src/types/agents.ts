@@ -54,6 +54,12 @@ export interface AgentMessage {
   content: string | ChatCompletionContentPart[]
   timestamp?: number
   error?: string
+  agent?: {
+    id: string
+    name: string
+    icon: string
+    description?: string
+  }
 }
 
 export interface Conversation {

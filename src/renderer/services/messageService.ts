@@ -8,7 +8,8 @@ export class MessageService {
   private conversations: Map<string, {
     conversation: Conversation,
     panelId: string,
-    agent?: AgentConfig
+    initialAgent: AgentConfig,
+    currentAgent: AgentConfig
   }> = new Map()
 
   constructor(
@@ -26,7 +27,7 @@ export class MessageService {
       return
     }
 
-    const { conversation, agent } = record
+    const { conversation, initialAgent } = record
     
     translog.debug('Syncing conversation to panel', {
       panelId,
@@ -37,8 +38,8 @@ export class MessageService {
     this.panelManager.updatePanel(panelId, {
       contentProps: {
         messages: conversation.messages,
-        title: agent?.name || 'Chat',
-        agent,
+        title: initialAgent.name,
+        agent: initialAgent,
         loading,
         conversationId: conversation.id
       }
@@ -69,11 +70,20 @@ export class MessageService {
       // 设置加载状态
       this.syncToPanel(panelId, true)
 
+      // 更新当前 agent
+      record.currentAgent = agent
+
       // 准备新消息
       const newMessage: AgentMessage = {
         role: 'user' as AgentRole,
         content: [{ type: 'text', text: message }],
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        agent: {
+          id: agent.id,
+          name: agent.name,
+          icon: agent.icon,
+          description: agent.description
+        }
       }
 
       // 更新内部状态
@@ -101,12 +111,18 @@ export class MessageService {
         // 只获取最新的回复消息
         const latestMessage = result.conversation.messages[result.conversation.messages.length - 1]
         if (latestMessage && latestMessage.role === 'assistant') {
+          // Add agent info to assistant message
+          latestMessage.agent = {
+            id: nextAgent?.id || agent.id,
+            name: nextAgent?.name || agent.name,
+            icon: nextAgent?.icon || agent.icon,
+            description: nextAgent?.description || agent.description
+          }
           record.conversation.messages.push(latestMessage)
         }
         
         // 更新其他会话信息
         record.conversation.id = result.conversation.id
-        record.agent = nextAgent
 
         // 同步到 Panel
         this.syncToPanel(panelId)
@@ -148,7 +164,8 @@ export class MessageService {
         this.conversations.set(result.conversation.id, {
           conversation: result.conversation,
           panelId,
-          agent: selectedAgent
+          initialAgent: selectedAgent,
+          currentAgent: selectedAgent
         })
 
         return {

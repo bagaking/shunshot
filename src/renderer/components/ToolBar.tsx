@@ -33,24 +33,26 @@ const AgentMenu: React.FC<{
   const [agents, setAgents] = useState<AgentConfig[]>([])
   
   useEffect(() => {
-    window.shunshotCoreAPI.getAgents().then(setAgents)
+    window.shunshotCoreAPI.getAgents().then(agents => {
+      // 只显示视觉模型的 agents
+      const visionAgents = agents.filter(agent => agent.modelConfig.id === 'vision')
+      setAgents(visionAgents)
+    })
   }, [])
 
   return (
-    <div className="absolute top-full left-0 mt-1 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5">
-      <div className="py-1">
+    <div className="absolute top-full left-0 mt-1 w-40 bg-white rounded-lg shadow-lg ring-1 ring-black/5">
+      <div className="py-0.5">
         {agents.map(agent => (
           agent.enabled && (
             <button
               key={agent.id}
-              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1.5 transition-colors"
               onClick={() => onSelect(agent.id)}
               disabled={!selectedBounds}
             >
-              <div className="flex items-center space-x-2">
-                <div className="text-lg">{agent.icon}</div>
-                <span>{agent.name}</span>
-              </div>
+              <div className="text-base leading-none">{agent.icon}</div>
+              <span className="truncate">{agent.name}</span>
             </button>
           )
         ))}
@@ -198,6 +200,18 @@ export const ToolBar: React.FC<ToolBarProps> = ({
 
   const tools: ToolButton[] = [
     {
+      tooltip: 'Agents',
+      icon: <RobotOutlined spin={isProcessing} />,
+      onClick: () => setShowAgentMenu(true),
+      disabled: !selectedBounds || isProcessing
+    },
+    {
+      tooltip: '识别内容',
+      icon: <FileSearchOutlined spin={isProcessing} />,
+      onClick: handleOCR,
+      disabled: !selectedBounds || isProcessing
+    },
+    {
       tooltip: '矩形选择',
       icon: <Square className="w-3.5 h-3.5" />,
     },
@@ -218,22 +232,10 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       icon: <EditOutlined />,
     },
     {
-      tooltip: 'OCR 识别',
-      icon: <FileSearchOutlined spin={isProcessing} />,
-      onClick: handleOCR,
-      disabled: !selectedBounds || isProcessing
-    },
-    {
       tooltip: isScreenRecording ? '切换到截图' : '切换到录屏',
       icon: isScreenRecording ? <CameraOutlined /> : <VideoCameraOutlined />,
       onClick: () => onModeChange?.(!isScreenRecording)
     },
-    {
-      tooltip: 'AI Agents',
-      icon: <RobotOutlined spin={isProcessing} />,
-      onClick: () => setShowAgentMenu(true),
-      disabled: !selectedBounds || isProcessing
-    }
   ]
 
   const actions: ToolButton[] = [

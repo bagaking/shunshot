@@ -84,10 +84,9 @@ export const MessageItem: React.FC<MessageItemProps> = React.memo(({ msg, agent,
       {/* Avatar section */}
       <div className="flex flex-col items-center">
         <Avatar 
-          src={msg.role === 'user' ? undefined : agent?.icon}
-          className="w-10 h-10"
+          className="w-10 h-10 flex items-center justify-center text-lg"
         >
-          {msg.role === 'user' ? 'U' : agent?.name?.[0]}
+          {msg.role === 'user' ? 'U' : msg.agent?.icon || agent?.icon}
         </Avatar>
       </div>
 
@@ -96,11 +95,11 @@ export const MessageItem: React.FC<MessageItemProps> = React.memo(({ msg, agent,
         {/* Name, description and timestamp */}
         <div className="flex items-center gap-2 mb-1">
           <span className="font-medium">
-            {msg.role === 'user' ? '你' : agent?.name || 'Assistant'}
+            {msg.role === 'user' ? '你' : msg.agent?.name || agent?.name}
           </span>
-          {agent?.description && msg.role === 'assistant' && (
+          {msg.agent?.description && msg.role === 'assistant' && (
             <span className="text-xs text-gray-500">
-              ({agent.description})
+              ({msg.agent.description})
             </span>
           )}
           <span className="text-xs text-gray-500">
