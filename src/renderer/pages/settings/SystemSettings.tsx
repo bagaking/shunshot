@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { ShortcutRecorder } from '../../components/ShortcutRecorder' 
- 
 
 const IconOption: React.FC<{
   value: string
@@ -25,11 +24,13 @@ const IconOption: React.FC<{
 export const SystemSettings: React.FC = () => {
   const [trayIcon, setTrayIcon] = useState('default')
   const [shortcut, setShortcut] = useState('')
+  const [projectPath, setProjectPath] = useState('')
 
   useEffect(() => {
     // 加载初始配置
     window.shunshotCoreAPI.getPreference<string>('system.trayIcon').then(value => value && setTrayIcon(value))
     window.shunshotCoreAPI.getPreference<string>('system.captureShortcut').then(value => value && setShortcut(value))
+    window.shunshotCoreAPI.getPreference<{ path: string }>('system.project').then(value => value?.path && setProjectPath(value.path))
   }, [])
 
   const handleTrayIconChange = async (value: string) => {
@@ -42,9 +43,80 @@ export const SystemSettings: React.FC = () => {
     await window.shunshotCoreAPI.setPreference('system.captureShortcut', value)
   }
 
+  const handleProjectPathSelect = async () => {
+    const result = await window.shunshotCoreAPI.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+      title: '选择项目目录',
+      buttonLabel: '选择',
+      defaultPath: projectPath || undefined
+    })
+    
+    if (!result.canceled && result.filePaths[0]) {
+      const newPath = result.filePaths[0]
+      setProjectPath(newPath)
+      
+      // Get current project config and update only the path
+      const currentProject = await window.shunshotCoreAPI.getPreference<{ path: string; name: string; created: number; lastAccessed: number }>('system.project')
+      await window.shunshotCoreAPI.setPreference('system.project', {
+        ...currentProject,
+        path: newPath,
+        lastAccessed: Date.now()
+      })
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* 托盘图标设置 */}
+      
+
+      {/* 快捷键设置 */}
+      <div>
+        <h4 className="text-base font-medium text-gray-900 mb-4">
+          截图快捷键
+        </h4>
+        <div className="max-w-md">
+          <ShortcutRecorder
+            value={shortcut}
+            onChange={handleShortcutChange}
+          />
+          <p className="mt-2 text-sm text-gray-500">
+            点击输入框并按下新的快捷键组合来更改
+          </p>
+        </div>
+      </div>
+
+      {/* 项目路径设置 */}
+      <div>
+        <h4 className="text-base font-medium text-gray-900 mb-4">
+          项目路径
+        </h4>
+        <div className="max-w-2xl flex items-center space-x-4">
+          <div className="flex-1 truncate bg-gray-50 border border-gray-200 rounded-lg px-4 py-2">
+            {projectPath || '未设置'}
+          </div>
+          <button
+            onClick={handleProjectPathSelect}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            选择目录
+          </button>
+        </div>
+        <div className="mt-2 space-y-1">
+          <p className="text-sm text-gray-500">
+            选择保存截图和对话记录的目录
+          </p>
+          <p className="text-sm text-gray-400 italic">
+            注意：此配置为可选项。若不设置，自动保存等功能将被禁用，但不影响基本功能的使用。
+          </p>
+          {!projectPath && (
+            <p className="text-sm text-amber-600">
+              当前未配置项目路径，自动保存功能已禁用
+            </p>
+          )}
+        </div>
+      </div>
+
       <div>
         <h4 className="text-base font-medium text-gray-900 mb-4">
           托盘图标
@@ -71,22 +143,6 @@ export const SystemSettings: React.FC = () => {
             selected={trayIcon === 'colorful'}
             onClick={() => handleTrayIconChange('colorful')}
           />
-        </div>
-      </div>
-
-      {/* 快捷键设置 */}
-      <div>
-        <h4 className="text-base font-medium text-gray-900 mb-4">
-          截图快捷键
-        </h4>
-        <div className="max-w-md">
-          <ShortcutRecorder
-            value={shortcut}
-            onChange={handleShortcutChange}
-          />
-          <p className="mt-2 text-sm text-gray-500">
-            点击输入框并按下新的快捷键组合来更改
-          </p>
         </div>
       </div>
     </div>

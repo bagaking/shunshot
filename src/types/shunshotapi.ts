@@ -1,5 +1,6 @@
 import { AgentConfig, AgentResult, AgentRunOptions } from './agents'
 import { Bounds } from '../common/2d'
+import { OpenDialogOptions, OpenDialogReturnValue } from 'electron'
 
 export interface IShunshotCoreAPI {
   // 截图相关
@@ -17,6 +18,7 @@ export interface IShunshotCoreAPI {
   setWindowSize: (width: number, height: number) => Promise<void>
   openSettings: () => Promise<void>
   setIgnoreSystemShortcuts: (ignore: boolean) => Promise<void>
+  showOpenDialog: (options: OpenDialogOptions) => Promise<OpenDialogReturnValue>
 
   // OCR相关
   requestOCR: (bounds: Bounds) => Promise<{ text?: string, error?: any }>

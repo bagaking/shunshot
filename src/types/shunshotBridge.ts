@@ -44,6 +44,7 @@ export class ShunshotCoreBridge extends Bridge<IShunshotCoreAPI> {
       hideWindow: async () => {},
       showWindow: async () => {},
       setWindowSize: async () => {},
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
 
       // 插件相关
       loadPlugin: async () => {},

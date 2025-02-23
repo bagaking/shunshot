@@ -1,11 +1,11 @@
-import { NativeImage, screen } from 'electron'
+import { NativeImage, screen, dialog } from 'electron'
 import { Logger } from './logger'
 import { mgrWindows } from './mgrWindows'
 import { mgrCapture } from './mgrCapture'
 import { mgrClipboard } from './mgrClipboard'
 import { mgrOCR } from './mgrOCR'
 import { mgrPreference } from './mgrPreference'
-import { mgrShortcut } from './shortcut'
+import { mgrShortcut } from './mgrShortcut'
 import { IShunshotCoreAPI } from '../types/shunshotapi'
 import { Bounds } from '../common/2d'
 import { image } from '../common/2d'
@@ -273,6 +273,12 @@ export const handlers: IShunshotCoreAPI = {
     await mgrWindows.createSettingsWindow()
   },
 
+  showOpenDialog: async (options) => {
+    Logger.debug({message: 'Showing open dialog', data: { options }})
+    const mainWindow = mgrWindows.getMainWindow()
+    return dialog.showOpenDialog(mainWindow!, options)
+  },
+
   setIgnoreSystemShortcuts: async (ignore: boolean) => {
     Logger.debug(`Setting ignore system shortcuts: ${ignore}`)
     if (ignore) {
@@ -289,9 +295,6 @@ export const handlers: IShunshotCoreAPI = {
     // TODO: 实现插件加载
     Logger.log(`Loading plugin: ${pluginId}`)
   },
-
-
-
 
   // OCR 相关
   requestOCR: async (bounds: Bounds) => {

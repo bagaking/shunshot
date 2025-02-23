@@ -35,10 +35,7 @@
       });
 
       window.addEventListener('unhandledrejection', (event) => {
-        console.error('[SettingWindow] Unhandled promise rejection:',JSON.stringify({
-          reason: event.reason,
-          timestamp: Date.now()
-        }));
+        console.error('[SettingWindow] Unhandled promise rejection:',JSON.stringify({ event, timestamp: Date.now() }));
       });
   </script>
 </head>

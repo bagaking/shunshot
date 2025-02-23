@@ -32,6 +32,7 @@ const createSecureIPC = () => {
     `${SHUNSHOT_BRIDGE_PREFIX}:runAgent`,
     `${SHUNSHOT_BRIDGE_PREFIX}:createAgent`,
     `${SHUNSHOT_BRIDGE_PREFIX}:deleteAgent`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:showOpenDialog`,
   ]
 
   return {
@@ -158,6 +159,10 @@ const createCoreAPI = (secureIPC: ReturnType<typeof createSecureIPC>): IShunshot
     runAgent: async (id: string, options) => {
       console.debug('[Preload] Invoking runAgent', { id })
       return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:runAgent`, id, options)
+    },
+    showOpenDialog: async (options) => {
+      console.debug('[Preload] Invoking showOpenDialog', { options })
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:showOpenDialog`, options)
     },
   }
 }

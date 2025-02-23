@@ -1,11 +1,10 @@
 import OpenAI from 'openai'
-import crypto from 'crypto'
-import { AgentConfig, AgentResult, AgentRunOptions, DEFAULT_AGENTS, Conversation, AgentMessage, AgentModelGene, validGenes } from '../types/agents'
+import { AgentConfig, AgentResult, AgentRunOptions, DEFAULT_AGENTS, AgentMessage, AgentModelGene, validGenes } from '../types/agents'
 import { mgrPreference } from './mgrPreference'
 import { Logger } from './logger' 
 import { image } from '../common/2d'
-import { omit } from 'lodash'
 import { NativeImage } from 'electron'
+import { ConversationManager } from './mgrConversation'
 
 interface ModelConfig {
   apiKey: string
@@ -196,108 +195,6 @@ class OpenAIClientManager {
       throw new ClientError(`OpenAI client not initialized: ${type}`)
     }
     return client
-  }
-}
-
-// Conversation manager
-class ConversationManager {
-  private conversations: Map<string, Conversation> = new Map()
-  private readonly MAX_CONVERSATIONS = 100
-  private readonly MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 hours
-
-  constructor() {
-    this.startCleanupInterval()
-  }
-
-  private startCleanupInterval() {
-    setInterval(() => this.cleanup(), 60 * 60 * 1000) // Cleanup every hour
-  }
-
-  private cleanup() {
-    const now = Date.now()
-    Array.from(this.conversations.entries()).forEach(([id, conversation]) => {
-      if (now - conversation.metadata.updatedAt > this.MAX_AGE_MS) {
-        this.conversations.delete(id)
-        Logger.debug(`Cleaned up conversation: ${id}`)
-      }
-    })
-  }
-
-  getConversation(id: string): Conversation | undefined {
-    return this.conversations.get(id)
-  }
-
-  createConversation(agentId: string, agent: AgentConfig, croppedImage: NativeImage): Conversation {
-    if (this.conversations.size >= this.MAX_CONVERSATIONS) {
-      this.cleanup()
-    }
-
-    const conversation: Conversation = {
-      id: crypto.randomUUID(),
-      agentId,
-      messages: [],
-      metadata: {
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        turnCount: 0
-      }
-    }
-
-    // Add system prompt message
-    conversation.messages.push({
-      role: 'system',
-      content: agent.systemPrompt,
-      timestamp: Date.now()
-    })
-
-    try {
-      // Convert image to base64 and create message
-      const base64Image = croppedImage.toPNG().toString('base64')
-      const imageMessage: AgentMessage = {
-        role: 'user',
-        content: [
-          {
-            type: 'image_url',
-            image_url: {
-              url: `data:image/png;base64,${base64Image}`,
-            },
-          },
-          { 
-            type: 'text', 
-            text: '这张图片说了啥' 
-          },
-        ],
-        timestamp: Date.now()
-      }
-      
-      // Add message to conversation
-      conversation.messages.push(imageMessage)
-    } catch (error) {
-      Logger.error('Failed to process image:', error)
-      throw new AgentError('Failed to process image', 'IMAGE_PROCESSING_ERROR')
-    }
-
-    this.conversations.set(conversation.id, conversation)
-    return conversation
-  }
-
-  updateConversation(id: string, update: Partial<Conversation>) {
-    const conversation = this.conversations.get(id)
-    if (!conversation) {
-      throw new Error(`Conversation not found: ${id}`)
-    }
-
-    const updated = {
-      ...conversation,
-      ...update,
-      metadata: {
-        ...conversation.metadata,
-        updatedAt: Date.now()
-      }
-    }
-
-    this.conversations.set(id, updated)
-    return updated
   }
 }
 
