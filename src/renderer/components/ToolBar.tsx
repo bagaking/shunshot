@@ -35,7 +35,7 @@ const AgentMenu: React.FC<{
   useEffect(() => {
     window.shunshotCoreAPI.getAgents().then(agents => {
       // 只显示视觉模型的 agents
-      const visionAgents = agents.filter(agent => agent.modelConfig.id === 'vision')
+      const visionAgents = agents.filter(agent => agent.modelConfig.gene === 'vision')
       setAgents(visionAgents)
     })
   }, [])

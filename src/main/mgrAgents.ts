@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import crypto from 'crypto'
-import { AgentConfig, AgentResult, AgentRunOptions, DEFAULT_AGENTS, Conversation, AgentMessage } from '../types/agents'
+import { AgentConfig, AgentResult, AgentRunOptions, DEFAULT_AGENTS, Conversation, AgentMessage, AgentModelGene } from '../types/agents'
 import { mgrPreference } from './mgrPreference'
 import { Logger } from './logger' 
 import { image } from '../common/2d'
@@ -81,9 +81,10 @@ class AgentConfigManager {
   }
 
   private validateAgents(agents: AgentConfig[]): AgentConfig[] {
+    const validGenes: AgentModelGene[] = ['vision', 'reasoning', 'standard']
     return agents.filter(agent => {
       const isValid = agent?.id && agent?.modelConfig && 
-        ['vision', 'inference'].includes(agent.modelConfig.id)
+        validGenes.includes(agent.modelConfig.gene)
       if (!isValid) {
         Logger.warn(`Invalid agent config: ${JSON.stringify(agent)}`)
       }
@@ -160,7 +161,8 @@ class OpenAIClientManager {
   private async initialize() {
     try {
       await this.initializeClient('vision')
-      await this.initializeClient('inference')
+      await this.initializeClient('reasoning')
+      await this.initializeClient('standard')
       Logger.log('OpenAI clients initialized')
     } catch (error) {
       Logger.error('Failed to initialize OpenAI clients', error as Error)
@@ -168,7 +170,7 @@ class OpenAIClientManager {
     }
   }
 
-  private async initializeClient(type: 'vision' | 'inference') {
+  private async initializeClient(type: AgentModelGene) {
     const config = await mgrPreference.get<ModelConfig>(`aiModel.${type}`)
     this.clients.set(type, config?.apiKey ? new OpenAI({
       apiKey: config.apiKey,
@@ -176,7 +178,7 @@ class OpenAIClientManager {
     }) : null)
   }
 
-  getClient(type: 'vision' | 'inference'): OpenAI {
+  getClient(type: AgentModelGene): OpenAI {
     const client = this.clients.get(type)
     if (!client) {
       throw new ClientError(`OpenAI client not initialized: ${type}`)
@@ -306,11 +308,11 @@ class AgentRunner {
         throw new AgentError(`Agent is disabled: ${id}`, 'AGENT_DISABLED')
       }
 
-      const openai = this.clientManager.getClient(agent.modelConfig.id as 'vision' | 'inference')
-      const modelConfig = await mgrPreference.get<ModelConfig>(`aiModel.${agent.modelConfig.id}`)
+      const openai = this.clientManager.getClient(agent.modelConfig.gene as AgentModelGene)
+      const modelConfig = await mgrPreference.get<ModelConfig>(`aiModel.${agent.modelConfig.gene}`)
       
       if (!modelConfig?.modelName) {
-        throw new ConfigError(`Model name not configured: ${agent.modelConfig.id}`)
+        throw new ConfigError(`Model name not configured: ${agent.modelConfig.gene}`)
       }
 
       if (!croppedImage) {

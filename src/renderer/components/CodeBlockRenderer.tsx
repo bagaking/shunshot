@@ -14,6 +14,7 @@ import { ChatCompletionContentPart } from '../../types/agents'
 // Base configuration interface
 interface BaseConfig {
   fontFamily: string;
+  fontSize: number;
   useMaxWidth: boolean;
   padding: number;
   wrap: boolean;
@@ -26,6 +27,7 @@ interface BaseConfig {
 // Common configuration
 const commonConfig: BaseConfig = {
   fontFamily: 'consolas, ui-sans-serif, system-ui, -apple-system',
+  fontSize: 1,
   useMaxWidth: false,
   padding: 8,
   wrap: true,
@@ -57,13 +59,15 @@ mermaid.initialize({
     messageAlign: 'center',
     mirrorActors: true,
     rightAngles: false,
-    showSequenceNumbers: false
+    showSequenceNumbers: false,
+    ...commonConfig
   },
 
   // State diagram config
-  stateDiagram: {
+  state: {
+    ...commonConfig,
     diagramPadding: 8,
-    useMaxWidth: true
+    useMaxWidth: true,
   },
 
   // Gantt chart config
@@ -72,25 +76,35 @@ mermaid.initialize({
     barHeight: 20,
     barGap: 4,
     topPadding: 50,
-    gridLineStartPadding: 35
+    gridLineStartPadding: 35,
+    ...commonConfig,
+    fontSize: 12
   },
 
   // Class diagram config
-  classDiagram: {
+  class: {
     diagramPadding: 8,
-    useMaxWidth: true
+    ...commonConfig,
+    useMaxWidth: true,
   },
 
   // Pie chart config
   pie: {
-    textPosition: 0.75
+    textPosition: 0.75,
+    ...commonConfig
   },
 
   // Bar chart config
   bar: {
     barWidth: 35,
     barGap: 4,
-    xAxisLabelAngle: 45
+    xAxisLabelAngle: 45,
+    ...commonConfig
+  },
+
+  // Dashboard config
+  dashboard: {
+    ...commonConfig
   }
 })
 
@@ -119,39 +133,27 @@ const MermaidContainer: React.FC<MermaidContainerProps> = ({ code }) => {
   const containerId = `mermaid-${Math.random().toString(36).slice(2)}`
   const chartType = detectChartType(code)
 
-  const renderDiagram = async () => {
-    try {
-      const container = document.getElementById(containerId)
-      if (!container) return
-
-      // Clear container
-      container.innerHTML = code
-
-      // Re-render
-      await mermaid.run({
-        querySelector: `#${containerId}`
-      })
-      setError('')
-    } catch (err) {
-      console.error('Mermaid rendering failed:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Failed to render diagram'
-      let detailedError = `${chartType !== 'unknown' ? `Failed to render ${chartType} diagram` : 'Failed to render diagram'}`
-      
-      // Add more specific error information
-      if (errorMessage.includes('Syntax error')) {
-        detailedError += ': Syntax error in diagram code'
-      } else if (errorMessage.includes('Parse error')) {
-        detailedError += ': Invalid diagram structure'
-      } else {
-        detailedError += `: ${errorMessage}`
-      }
-      
-      setError(detailedError)
-    }
-  }
-
   useEffect(() => {
     if (!showCode) {
+      const renderDiagram = async () => {
+        try {
+          const container = document.getElementById(containerId)
+          if (!container) return
+
+          // Clear container
+          container.innerHTML = code
+
+          // Re-render
+          await mermaid.run({
+            querySelector: `#${containerId}`
+          })
+          setError('')
+        } catch (err) {
+          console.error('Mermaid rendering failed:', err)
+          const errorMessage = err instanceof Error ? err.message : 'Failed to render diagram'
+          setError(`${chartType !== 'unknown' ? `Failed to render ${chartType} diagram: ` : ''}${errorMessage}`)
+        }
+      }
       renderDiagram()
     }
   }, [showCode, code, key, containerId, chartType])
@@ -175,35 +177,6 @@ const MermaidContainer: React.FC<MermaidContainerProps> = ({ code }) => {
 
   return (
     <div className={getContainerClass()}>
-      {/* Error bar with animation */}
-      {error && (
-        <div 
-          className="absolute top-0 left-0 right-0 animate-fade-in"
-          style={{
-            animation: 'slideDown 0.3s ease-out'
-          }}
-        >
-          <div className="bg-red-500/10 border-t-2 border-red-500 rounded-t-lg">
-            <div className="px-4 py-2 text-sm text-red-500 font-medium flex items-center justify-between">
-              <div className="flex items-center">
-                <span className="mr-2">⚠️</span>
-                {error}
-              </div>
-              <Button
-                type="text"
-                size="small"
-                className="!text-red-500 hover:!text-red-600"
-                onClick={renderDiagram}
-                title="Retry rendering"
-              >
-                Retry
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Controls */}
       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
         <Button
           type="text"
@@ -220,38 +193,24 @@ const MermaidContainer: React.FC<MermaidContainerProps> = ({ code }) => {
         />
       </div>
 
-      {/* Content */}
-      <div 
-        className={error ? 'mt-12' : ''}
-        style={{
-          transition: 'margin-top 0.3s ease-out'
-        }}
-      >
-        {showCode ? (
-          <pre className="!bg-transparent !p-0 !m-0">
-            <code className="!bg-transparent text-gray-300 whitespace-pre-wrap break-all">
-              {code}
-            </code>
-          </pre>
-        ) : (
+      {showCode ? (
+        <pre className="!bg-transparent !p-0 !m-0">
+          <code className="!bg-transparent text-gray-300 whitespace-pre-wrap break-all">
+            {code}
+          </code>
+        </pre>
+      ) : (
+        <>
           <div id={containerId} className={`mermaid ${chartType}`}>
             {code}
           </div>
-        )}
-      </div>
-
-      <style jsx>{`
-        @keyframes slideDown {
-          from {
-            transform: translateY(-100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
-        }
-      `}</style>
+          {error && (
+            <div className="mt-2 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

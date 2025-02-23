@@ -1,12 +1,15 @@
 import { Bounds } from '../common/2d'
 
+export type AgentModelGene = "vision" | "reasoning" | "standard"
+
 export interface AgentModelConfig {
-  id: string // e.g. 'vision' or 'inference'
+  gene: AgentModelGene // e.g. 'vision' or 'reasoning'
   name: string // Display name
 }
 
 export interface AgentConfig {
   id: string
+  
   name: string
   description: string
   icon: string
@@ -99,7 +102,7 @@ export const DEFAULT_AGENTS: AgentConfig[] = [
     icon: '📝',
     systemPrompt: '请提取图片中的所有文字内容，保持原有格式和布局',
     modelConfig: {
-      id: 'vision',
+      gene: 'vision',
       name: '视觉模型'
     },
     enabled: true,
@@ -116,7 +119,7 @@ export const DEFAULT_AGENTS: AgentConfig[] = [
     icon: '💻',
     systemPrompt: '分析这段代码的功能、结构和潜在问题，并给出改进建议',
     modelConfig: {
-      id: 'vision',
+      gene: 'vision',
       name: '视觉模型'
     },
     enabled: true,

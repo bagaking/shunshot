@@ -24,51 +24,47 @@ export const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'system' | 'aiModel' | 'agents'>('system')
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="bg-white shadow rounded-lg">
-          {/* 标题 */}
-          <div className="px-4 py-5 border-b border-gray-200 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">
-              设置
-            </h3>
-          </div>
+    <div className="h-screen flex flex-col bg-white">
+      {/* 标题 */}
+      <div className="px-6 py-5 border-b border-gray-200">
+        <h3 className="text-lg leading-6 font-medium text-gray-900">
+          设置
+        </h3>
+      </div>
 
-          {/* 标签页 */}
-          <div className="border-b border-gray-200">
-            <nav className="flex space-x-8 px-4" aria-label="Tabs">
-              <TabButton
-                active={activeTab === 'system'}
-                onClick={() => setActiveTab('system')}
-              >
-                系统设置
-              </TabButton>
-              <TabButton
-                active={activeTab === 'aiModel'}
-                onClick={() => setActiveTab('aiModel')}
-              >
-                大模型设置
-              </TabButton>
-              <TabButton
-                active={activeTab === 'agents'}
-                onClick={() => setActiveTab('agents')}
-              >
-                AI Agents
-              </TabButton>
-            </nav>
-          </div>
+      {/* 标签页 */}
+      <div className="border-b border-gray-200">
+        <nav className="flex space-x-8 px-6" aria-label="Tabs">
+          <TabButton
+            active={activeTab === 'system'}
+            onClick={() => setActiveTab('system')}
+          >
+            系统设置
+          </TabButton>
+          <TabButton
+            active={activeTab === 'aiModel'}
+            onClick={() => setActiveTab('aiModel')}
+          >
+            大模型设置
+          </TabButton>
+          <TabButton
+            active={activeTab === 'agents'}
+            onClick={() => setActiveTab('agents')}
+          >
+            AI Agents
+          </TabButton>
+        </nav>
+      </div>
 
-          {/* 内容区域 */}
-          <div className="px-4 py-5 sm:p-6">
-            {activeTab === 'system' ? (
-              <SystemSettings />
-            ) : activeTab === 'aiModel' ? (
-              <AIModelSettings />
-            ) : (
-              <AgentSettings />
-            )}
-          </div>
-        </div>
+      {/* 内容区域 */}
+      <div className="flex-1 overflow-auto px-6 py-6">
+        {activeTab === 'system' ? (
+          <SystemSettings />
+        ) : activeTab === 'aiModel' ? (
+          <AIModelSettings />
+        ) : (
+          <AgentSettings />
+        )}
       </div>
     </div>
   )

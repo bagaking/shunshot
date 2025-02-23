@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { AgentConfig } from '../../types/agents'; 
+import { AgentConfig, AgentModelGene } from '../../types/agents'; 
 import { Button, List, Modal, Form, Input, InputNumber, Popconfirm, Select } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 
 interface ModelOption {
-  id: string;
+  gene: AgentModelGene;
   name: string;
   baseURL: string;
   modelName: string;
@@ -17,7 +17,7 @@ const defaultAgent: AgentConfig = {
   icon: '🤖',
   systemPrompt: '',
   modelConfig: {
-    id: 'vision',
+    gene: 'vision',
     name: '视觉模型'
   },
   enabled: true,
@@ -47,7 +47,7 @@ export const AgentList: React.FC = () => {
 
   const loadModelConfigs = async () => {
     try {
-      const [vision, inference] = await Promise.all([
+      const [vision, reasoning] = await Promise.all([
         window.shunshotCoreAPI.getPreference<{
           apiKey: string;
           baseURL: string;
@@ -57,21 +57,21 @@ export const AgentList: React.FC = () => {
           apiKey: string;
           baseURL: string;
           modelName: string;
-        }>('aiModel.inference')
+        }>('aiModel.reasoning')
       ]);
 
       setModelOptions([
         {
-          id: 'vision',
+          gene: 'vision',
           name: '视觉模型',
           baseURL: vision?.baseURL || '',
           modelName: vision?.modelName || ''
         },
         {
-          id: 'inference',
+          gene: 'reasoning',
           name: '推理模型',
-          baseURL: inference?.baseURL || '',
-          modelName: inference?.modelName || ''
+          baseURL: reasoning?.baseURL || '',
+          modelName: reasoning?.modelName || ''
         }
       ]);
     } catch (error) {
@@ -82,13 +82,14 @@ export const AgentList: React.FC = () => {
   const handleCreateOrUpdate = async (values: any) => {
     const agentData: AgentConfig = {
       id: editingAgentId || `agent-${Date.now()}`,
+      
       name: values.name,
       description: values.description || '',
       icon: values.icon,
       systemPrompt: values.systemPrompt,
       modelConfig: {
-        id: values.modelConfig.id,
-        name: modelOptions.find(m => m.id === values.modelConfig.id)?.name || ''
+        gene: values.modelConfig.gene,
+        name: modelOptions.find(m => m.gene === values.modelConfig.gene)?.name || ''
       },
       enabled: true,
       parameters: {
@@ -125,7 +126,7 @@ export const AgentList: React.FC = () => {
       icon: agent.icon,
       systemPrompt: agent.systemPrompt,
       modelConfig: {
-        id: agent.modelConfig.id,
+        id: agent.modelConfig.gene,
       },
       temperature: agent.parameters?.temperature ?? defaultAgent.parameters.temperature,
       maxTokens: agent.parameters?.maxTokens ?? defaultAgent.parameters.maxTokens,
@@ -200,7 +201,7 @@ export const AgentList: React.FC = () => {
                 <div className="space-y-1">
                   <div>{agent.description}</div>
                   <div className="text-gray-500">
-                    Model: {agent.modelConfig.name} ({agent.modelConfig.id})
+                    Model: {agent.modelConfig.name} ({agent.modelConfig.gene})
                   </div>
                   <div className="text-gray-500">
                     Temperature: {agent.parameters?.temperature ?? 'N/A'}, 
@@ -270,7 +271,7 @@ export const AgentList: React.FC = () => {
           >
             <Select>
               {modelOptions.map(model => (
-                <Select.Option key={model.id} value={model.id}>
+                <Select.Option key={model.gene} value={model.gene}>
                   {model.name} ({model.modelName || 'No model name configured'})
                 </Select.Option>
               ))}

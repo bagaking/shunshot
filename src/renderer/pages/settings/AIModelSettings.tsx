@@ -1,3 +1,4 @@
+import { AgentModelGene } from '@/types/agents'
 import React, { useState, useEffect } from 'react'
 
 interface ModelConfig {
@@ -9,6 +10,7 @@ interface ModelConfig {
 const ModelConfigForm: React.FC<{
   title: string
   config: ModelConfig
+  
   onChange: (config: ModelConfig) => void
 }> = ({ title, config, onChange }) => {
   const [showApiKey, setShowApiKey] = useState(false)
@@ -106,52 +108,68 @@ const ModelConfigForm: React.FC<{
   )
 }
 
-export const AIModelSettings: React.FC = () => {
-  const [visionConfig, setVisionConfig] = useState<ModelConfig>({
+function NewConf() {
+  return {
     apiKey: '',
     baseURL: '',
     modelName: ''
-  })
+  }
+}
 
-  const [inferenceConfig, setInferenceConfig] = useState<ModelConfig>({
-    apiKey: '',
-    baseURL: '',
-    modelName: ''
-  })
+export const AIModelSettings: React.FC = () => {
+  const [visionConfig, setVisionConfig] = useState<ModelConfig>(NewConf())
+  const [reasoningConfig, setReasoningConfig] = useState<ModelConfig>(NewConf())
+  const [standardConfig, setStandardConfig] = useState<ModelConfig>(NewConf())
 
   useEffect(() => {
     // 加载初始配置
     window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.vision')
       .then(config => config && setVisionConfig(config))
-    window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.inference')
-      .then(config => config && setInferenceConfig(config))
+    window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.reasoning')
+      .then(config => config && setReasoningConfig(config))
+    window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.standard')
+      .then(config => config && setStandardConfig(config))
   }, [])
 
-  const handleVisionConfigChange = async (config: ModelConfig) => {
-    setVisionConfig(config)
-    await window.shunshotCoreAPI.setPreference('aiModel.vision', config)
+  const handleConfigChange = async (config: ModelConfig, agentGene: AgentModelGene) => {
+    await window.shunshotCoreAPI.setPreference(`aiModel.${agentGene}`, config)
+    switch (agentGene) {
+      case 'vision':
+        setVisionConfig(config)
+        break
+      case 'reasoning':
+        setReasoningConfig(config)
+        break
+      case 'standard':
+        setStandardConfig(config)
+        break
+    }
   }
-
-  const handleInferenceConfigChange = async (config: ModelConfig) => {
-    setInferenceConfig(config)
-    await window.shunshotCoreAPI.setPreference('aiModel.inference', config)
-  }
-
+ 
   return (
     <div className="space-y-12">
       <ModelConfigForm
         title="视觉模型配置"
         config={visionConfig}
-        onChange={handleVisionConfigChange}
+        onChange={(config) => handleConfigChange(config, 'vision')}
       />
       
+      <div className="border-t border-gray-200" />
+
+      <ModelConfigForm
+        title="标准模型配置"
+        config={standardConfig}
+        onChange={(config) => handleConfigChange(config, 'standard')}
+      />
+
       <div className="border-t border-gray-200" />
       
       <ModelConfigForm
         title="推理模型配置"
-        config={inferenceConfig}
-        onChange={handleInferenceConfigChange}
+        config={reasoningConfig}
+        onChange={(config) => handleConfigChange(config, 'reasoning')}
       />
+
     </div>
   )
 } 
