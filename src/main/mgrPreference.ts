@@ -15,7 +15,8 @@ interface SystemPreference {
 
 interface AIModelPreference {
   vision: ModelConfig;
-  inference: ModelConfig;
+  reasoning: ModelConfig;
+  standard: ModelConfig;
 }
 
 export interface Preferences {
@@ -35,11 +36,17 @@ const AI_MODEL_PREFERENCES: AIModelPreference = {
         baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
         modelName: 'ep-20250119144040-f2bqg'
     },
-    inference: {
+    reasoning: {
+        apiKey: '',
+        baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
+        modelName: 'deepseek-r1'
+    },
+    standard: {
         apiKey: '',
         baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
         modelName: 'gpt-4'
     }
+
 }
 
 const DEFAULT_PREFERENCES: Preferences = {

@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import crypto from 'crypto'
-import { AgentConfig, AgentResult, AgentRunOptions, DEFAULT_AGENTS, Conversation, AgentMessage, AgentModelGene } from '../types/agents'
+import { AgentConfig, AgentResult, AgentRunOptions, DEFAULT_AGENTS, Conversation, AgentMessage, AgentModelGene, validGenes } from '../types/agents'
 import { mgrPreference } from './mgrPreference'
 import { Logger } from './logger' 
 import { image } from '../common/2d'
@@ -64,6 +64,9 @@ class AgentConfigManager {
 
       this.agents = new Map(validAgents.map(agent => [agent.id, agent]))
       Logger.log(`Loaded ${this.agents.size} agents successfully`)
+      for (const agent of validAgents) {
+        Logger.log(`Agent: ${agent.id}: ${JSON.stringify(agent)}`)
+      }
     } catch (error) {
       Logger.error('Failed to load agents', error as Error)
       this.setDefaultAgents()
@@ -81,9 +84,10 @@ class AgentConfigManager {
   }
 
   private validateAgents(agents: AgentConfig[]): AgentConfig[] {
-    const validGenes: AgentModelGene[] = ['vision', 'reasoning', 'standard']
+    
     return agents.filter(agent => {
-      const isValid = agent?.id && agent?.modelConfig && 
+      const isValid = agent?.id && 
+        agent?.modelConfig?.gene && 
         validGenes.includes(agent.modelConfig.gene)
       if (!isValid) {
         Logger.warn(`Invalid agent config: ${JSON.stringify(agent)}`)
@@ -103,6 +107,11 @@ class AgentConfigManager {
   async createAgent(agent: AgentConfig): Promise<boolean> {
     if (this.agents.has(agent.id)) {
       throw new ConfigError(`Agent already exists: ${agent.id}`)
+    }
+
+    // Validate before saving
+    if (!agent.modelConfig?.gene || !validGenes.includes(agent.modelConfig.gene)) {
+      throw new ConfigError(`Invalid agent configuration: missing or invalid modelConfig.gene`)
     }
 
     this.agents.set(agent.id, agent)
@@ -136,7 +145,10 @@ class AgentConfigManager {
     try {
       const allAgents = Array.from(this.agents.values())
       await mgrPreference.set('agents', allAgents)
-      Logger.log('Agents saved successfully')
+      Logger.log(`Agents saved successfully, ${allAgents.length} agents`)
+      for (const agent of allAgents) {
+        Logger.log(`Agent: ${agent.id}: ${JSON.stringify(agent)}`)
+      }
     } catch (error) {
       Logger.error('Failed to save agents', error as Error)
       throw new ConfigError('Failed to save agents')

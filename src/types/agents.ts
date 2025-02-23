@@ -1,6 +1,7 @@
 import { Bounds } from '../common/2d'
 
-export type AgentModelGene = "vision" | "reasoning" | "standard"
+export const validGenes = ['vision', 'reasoning', 'standard'] as const
+export type AgentModelGene = typeof validGenes[number]
 
 export interface AgentModelConfig {
   gene: AgentModelGene // e.g. 'vision' or 'reasoning'

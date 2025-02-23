@@ -28,8 +28,8 @@ export const SystemSettings: React.FC = () => {
 
   useEffect(() => {
     // 加载初始配置
-    window.shunshotCoreAPI.getPreference<string>('system.trayIcon').then(setTrayIcon)
-    window.shunshotCoreAPI.getPreference<string>('system.captureShortcut').then(setShortcut)
+    window.shunshotCoreAPI.getPreference<string>('system.trayIcon').then(value => value && setTrayIcon(value))
+    window.shunshotCoreAPI.getPreference<string>('system.captureShortcut').then(value => value && setShortcut(value))
   }, [])
 
   const handleTrayIconChange = async (value: string) => {

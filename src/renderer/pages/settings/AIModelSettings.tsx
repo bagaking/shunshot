@@ -5,14 +5,15 @@ interface ModelConfig {
   apiKey: string
   baseURL: string
   modelName: string
+  gene: AgentModelGene
 }
 
 const ModelConfigForm: React.FC<{
   title: string
   config: ModelConfig
-  
+  gene: AgentModelGene
   onChange: (config: ModelConfig) => void
-}> = ({ title, config, onChange }) => {
+}> = ({ title, config, gene, onChange }) => {
   const [showApiKey, setShowApiKey] = useState(false)
   const [urlError, setUrlError] = useState<string | null>(null)
 
@@ -25,7 +26,7 @@ const ModelConfigForm: React.FC<{
         setUrlError('请输入有效的 URL')
       }
     }
-    onChange({ ...config, [field]: value })
+    onChange({ ...config, gene, [field]: value })
   }
 
   return (
@@ -112,7 +113,8 @@ function NewConf() {
   return {
     apiKey: '',
     baseURL: '',
-    modelName: ''
+    modelName: '',
+    gene: 'vision' as AgentModelGene
   }
 }
 
@@ -124,11 +126,11 @@ export const AIModelSettings: React.FC = () => {
   useEffect(() => {
     // 加载初始配置
     window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.vision')
-      .then(config => config && setVisionConfig(config))
+      .then(config => config && setVisionConfig({...config, gene: 'vision'}))
     window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.reasoning')
-      .then(config => config && setReasoningConfig(config))
+      .then(config => config && setReasoningConfig({...config, gene: 'reasoning'}))
     window.shunshotCoreAPI.getPreference<ModelConfig>('aiModel.standard')
-      .then(config => config && setStandardConfig(config))
+      .then(config => config && setStandardConfig({...config, gene: 'standard'}))
   }, [])
 
   const handleConfigChange = async (config: ModelConfig, agentGene: AgentModelGene) => {
@@ -151,6 +153,7 @@ export const AIModelSettings: React.FC = () => {
       <ModelConfigForm
         title="视觉模型配置"
         config={visionConfig}
+        gene="vision"
         onChange={(config) => handleConfigChange(config, 'vision')}
       />
       
@@ -159,6 +162,7 @@ export const AIModelSettings: React.FC = () => {
       <ModelConfigForm
         title="标准模型配置"
         config={standardConfig}
+        gene="standard"
         onChange={(config) => handleConfigChange(config, 'standard')}
       />
 
@@ -167,6 +171,7 @@ export const AIModelSettings: React.FC = () => {
       <ModelConfigForm
         title="推理模型配置"
         config={reasoningConfig}
+        gene="reasoning"
         onChange={(config) => handleConfigChange(config, 'reasoning')}
       />
 
