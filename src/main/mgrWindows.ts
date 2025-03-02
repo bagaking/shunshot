@@ -43,27 +43,28 @@ export class WindowManager {
     const preloadPath = join(process.env.DIST_PRELOAD!, 'index.js')
     Logger.log(`preloadPath: ${preloadPath}`)
     const mainWindow = new BrowserWindow({
-      width: 200,
-      height: 272,
+      width: 800,
+      height: 600,
       webPreferences: {
         preload: preloadPath,
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
       },
-      frame: false,
-      transparent: true,
-      resizable: false,
-      alwaysOnTop: true,
-      skipTaskbar: true,
+      frame: true,
+      transparent: false,
+      resizable: true,
+      alwaysOnTop: false,
+      skipTaskbar: false,
       hasShadow: true,
-      type: 'panel',
-      show: false, // 默认不显示
+      show: false, // 默认不显示，等加载完成后显示
     })
 
-    // 设置窗口位置 - 默认在右下角
+    // 设置窗口位置 - 居中显示
     const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
-    mainWindow.setPosition(screenWidth - 300, screenHeight - 400)
+    const x = Math.floor((screenWidth - 800) / 2)
+    const y = Math.floor((screenHeight - 600) / 2)
+    mainWindow.setPosition(x, y)
 
     // 加载页面
     if (process.env.VITE_DEV_SERVER_URL) {

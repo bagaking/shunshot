@@ -7,6 +7,7 @@ import { translog } from '../utils/translog'
 import { Square, Circle, Pencil, Grid } from 'lucide-react'
 import { EditOutlined, FileSearchOutlined, VideoCameraOutlined, CameraOutlined, RobotOutlined, CloseOutlined, CheckOutlined } from '@ant-design/icons'
 import { MessageService } from '../services/messageService'
+import { ToolType } from '../../types/capture'
 
 interface ToolBarProps {
   onConfirm: () => void
@@ -15,6 +16,8 @@ interface ToolBarProps {
   selectedBounds: Bounds | null
   isScreenRecording?: boolean
   onModeChange?: (isScreenRecording: boolean) => void
+  onToolChange?: (tool: ToolType) => void
+  activeTool?: ToolType
 }
 
 interface ToolButton {
@@ -23,6 +26,8 @@ interface ToolButton {
   onClick?: () => void
   primary?: boolean
   disabled?: boolean
+  toolType?: ToolType
+  isActive?: boolean
 }
  
 const AgentMenu: React.FC<{
@@ -67,7 +72,9 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   onOCR,
   selectedBounds,
   isScreenRecording = false,
-  onModeChange
+  onModeChange,
+  onToolChange,
+  activeTool = ToolType.None
 }) => {
   const [activeTooltip, setActiveTooltip] = useState<string>('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -198,6 +205,14 @@ export const ToolBar: React.FC<ToolBarProps> = ({
     }
   }
 
+  // 处理工具选择
+  const handleToolSelect = (toolType: ToolType) => {
+    if (onToolChange) {
+      translog.debug('Tool selected:', { toolType })
+      onToolChange(toolType)
+    }
+  }
+
   const tools: ToolButton[] = [
     {
       tooltip: 'Agents',
@@ -212,24 +227,52 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       disabled: !selectedBounds || isProcessing
     },
     {
-      tooltip: '矩形选择',
-      icon: <Square className="w-3.5 h-3.5" />,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        </svg>
+      ),
+      tooltip: '矩形',
+      toolType: ToolType.Rectangle,
+      isActive: activeTool === ToolType.Rectangle,
+      onClick: () => handleToolSelect(ToolType.Rectangle),
+      disabled: !selectedBounds || isProcessing
     },
     {
-      tooltip: '椭圆选择',
-      icon: <Circle className="w-3.5 h-3.5" />,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+        </svg>
+      ),
+      tooltip: '椭圆',
+      toolType: ToolType.Ellipse,
+      isActive: activeTool === ToolType.Ellipse,
+      onClick: () => handleToolSelect(ToolType.Ellipse),
+      disabled: !selectedBounds || isProcessing
     },
     {
       tooltip: '画笔',
       icon: <Pencil className="w-3.5 h-3.5" />,
+      toolType: ToolType.Pencil,
+      isActive: activeTool === ToolType.Pencil,
+      onClick: () => handleToolSelect(ToolType.Pencil),
+      disabled: !selectedBounds || isProcessing
     },
     {
       tooltip: '马赛克',
       icon: <Grid className="w-3.5 h-3.5" />,
+      toolType: ToolType.Mosaic,
+      isActive: activeTool === ToolType.Mosaic,
+      onClick: () => handleToolSelect(ToolType.Mosaic),
+      disabled: !selectedBounds || isProcessing
     },
     {
       tooltip: '文字',
       icon: <EditOutlined />,
+      toolType: ToolType.Text,
+      isActive: activeTool === ToolType.Text,
+      onClick: () => handleToolSelect(ToolType.Text),
+      disabled: !selectedBounds || isProcessing
     },
     {
       tooltip: isScreenRecording ? '切换到截图' : '切换到录屏',
@@ -260,10 +303,12 @@ export const ToolBar: React.FC<ToolBarProps> = ({
           {tools.map((tool, index) => (
             <div key={index} className="relative group">
               <button
-                className={`w-7 h-7 rounded-md flex items-center justify-center text-gray-500 transition-colors duration-150 ${
+                className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150 ${
                   tool.disabled 
                     ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:text-gray-900 active:text-blue-600'
+                    : tool.isActive
+                      ? 'bg-blue-100 text-blue-600'
+                      : 'text-gray-500 hover:text-gray-900 active:text-blue-600'
                 }`}
                 onMouseEnter={() => setActiveTooltip(tool.tooltip)}
                 onMouseLeave={() => setActiveTooltip('')}

@@ -4,6 +4,8 @@ import { Logger } from './logger'
 import { NativeImage } from 'electron'
 import { mgrProject } from './mgrProject'
 import * as fs from 'fs/promises'
+import { ConversationListItem } from '../types/shunshotapi'
+import { mgrAgents } from './mgrAgents'
 
 // Conversation manager
 export class ConversationManager {
@@ -106,15 +108,33 @@ export class ConversationManager {
       
       // If not in memory, try to load from disk
       if (!conversation) {
-        this.loadConversation(id)
-          .then(loaded => {
-            if (loaded) {
-              Logger.debug(`Loaded conversation ${id} from disk`)
-            }
-          })
-          .catch(error => {
-            Logger.error(`Failed to load conversation ${id}:`, error)
-          })
+        Logger.debug(`Conversation ${id} not found in memory, attempting to load synchronously`)
+        try {
+          // 同步加载对话，确保在返回前已经加载完成
+          const conversationPath = mgrProject.createConversationPathSync(id)
+          if (conversationPath) {
+            const fs = require('fs')
+            const data = fs.readFileSync(conversationPath, 'utf-8')
+            conversation = JSON.parse(data) as Conversation
+            
+            // Add to memory cache
+            this.conversations.set(id, conversation)
+            Logger.debug(`Loaded conversation ${id} from disk synchronously`)
+          }
+        } catch (error) {
+          Logger.error(`Failed to load conversation ${id} synchronously:`, error)
+          // 如果同步加载失败，尝试异步加载（作为备份）
+          this.loadConversation(id)
+            .then(loaded => {
+              if (loaded) {
+                Logger.debug(`Loaded conversation ${id} from disk asynchronously`)
+                this.conversations.set(id, loaded)
+              }
+            })
+            .catch(error => {
+              Logger.error(`Failed to load conversation ${id} asynchronously:`, error)
+            })
+        }
       }
       
       return conversation
@@ -214,5 +234,146 @@ export class ConversationManager {
 
       return updated
     }
+
+    /**
+     * Add a conversation to memory cache without updating it
+     * @param conversation The conversation to add to memory
+     */
+    addToMemory(conversation: Conversation): void {
+      this.conversations.set(conversation.id, conversation)
+      Logger.debug(`Added conversation ${conversation.id} to memory cache`)
+    }
+
+    /**
+     * Get all conversations
+     */
+    async getConversations(): Promise<ConversationListItem[]> {
+      // 如果项目未配置，返回空列表
+      if (!mgrProject.isProjectConfigured()) {
+        return []
+      }
+
+      try {
+        const paths = mgrProject.getPaths()
+        if (!paths) return []
+
+        // 读取会话目录
+        const files = await fs.readdir(paths.conversations)
+        const conversations: ConversationListItem[] = []
+
+        // 处理每个会话文件
+        for (const file of files) {
+          if (!file.endsWith('.json')) continue
+
+          try {
+            const filePath = `${paths.conversations}/${file}`
+            const data = await fs.readFile(filePath, 'utf-8')
+            const conversation = JSON.parse(data) as Conversation
+
+            // 提取预览文本
+            const lastMessage = conversation.messages[conversation.messages.length - 1]
+            let preview = ''
+            if (lastMessage) {
+              if (typeof lastMessage.content === 'string') {
+                preview = lastMessage.content
+              } else if (Array.isArray(lastMessage.content)) {
+                const textContent = lastMessage.content.find(c => c.type === 'text')
+                if (textContent && 'text' in textContent) {
+                  preview = textContent.text
+                }
+              }
+            }
+
+            conversations.push({
+              id: conversation.id,
+              agentId: conversation.agentId,
+              preview: preview.slice(0, 100), // 限制预览长度
+              timestamp: conversation.metadata.updatedAt
+            })
+          } catch (error) {
+            Logger.error(`Failed to process conversation file ${file}:`, error)
+          }
+        }
+
+        // 按时间戳排序，最新的在前
+        return conversations.sort((a, b) => b.timestamp - a.timestamp)
+      } catch (error) {
+        Logger.error('Failed to get conversations:', error)
+        throw error
+      }
+    }
+
+    /**
+     * Update conversation with a new message
+     */
+    async updateConversationWithMessage(id: string, message: string, targetAgentId?: string): Promise<Conversation> {
+      // First check if conversation is in memory
+      let conversation = this.conversations.get(id)
+      
+      // If not in memory, try to load from disk
+      if (!conversation) {
+        Logger.debug(`Conversation ${id} not found in memory, loading from disk`)
+        conversation = await this.loadConversation(id)
+        
+        // If still not found, throw error
+        if (!conversation) {
+          Logger.error(`Conversation ${id} not found in memory or on disk`)
+          throw new Error(`Conversation not found: ${id}`)
+        }
+        
+        // Ensure it's in memory cache for future operations
+        this.addToMemory(conversation)
+      }
+
+      // Add user message
+      const userMessage: AgentMessage = {
+        role: 'user',
+        content: message,
+        timestamp: Date.now()
+      }
+      conversation.messages.push(userMessage)
+
+      // Process with agent if specified
+      if (targetAgentId) {
+        try {
+          const result = await mgrAgents.runAgent(targetAgentId, null, {
+            selectedBounds: { x: 0, y: 0, width: 100, height: 100 },
+            conversationId: id,
+            parameters: {
+              messages: conversation.messages
+            }
+          })
+
+          if (result.error) {
+            Logger.error(`Agent processing failed: ${result.error}`)
+            throw new Error(result.error)
+          }
+
+          if (result.conversation?.messages) {
+            const latestMessage = result.conversation.messages[result.conversation.messages.length - 1]
+            if (latestMessage && latestMessage.role === 'assistant') {
+              conversation.messages.push(latestMessage)
+            }
+          }
+        } catch (error) {
+          Logger.error('Failed to process message with agent:', error)
+          throw error
+        }
+      }
+
+      // Update metadata
+      conversation.metadata.updatedAt = Date.now()
+      conversation.metadata.turnCount++
+
+      // Save to memory and disk
+      this.conversations.set(id, conversation)
+      await this.dumpConversations([conversation])
+
+      return conversation
+    }
 }
+  
+// 创建单例
+const conversationManager = new ConversationManager()
+export { conversationManager as mgrConversation }
   

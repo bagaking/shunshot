@@ -8,13 +8,15 @@ import { PanelErrorBoundary } from './PanelErrorBoundary'
 import { MessageItem } from '../components/MessageItem'
 import { AgentChatInput, SendOptions } from '../components/AgentChatInput'
 
-interface ChatPanelProps extends Omit<BasePanelProps, 'children'> {
+interface ChatPanelBaseProps {
   messages?: AgentMessage[]
   onSend?: (message: string, targetAgentId?: string) => Promise<void>
   loading?: boolean
   agent?: AgentConfig
   getAvailableAgents?: () => Promise<AgentConfig[]>
 }
+
+type ChatPanelProps = ChatPanelBaseProps & Partial<BasePanelProps>
 
 interface ChatState {
   availableAgents: AgentConfig[]
@@ -146,8 +148,39 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     </div>
   )
 
+  // 如果没有提供完整的 BasePanelProps，直接返回内容
+  if (!basePanelProps.id || !basePanelProps.position || !basePanelProps.size) {
+    return (
+      <PanelErrorBoundary>
+        <motion.div 
+          className="h-full"
+          initial={false}
+          animate={{
+            opacity: 1
+          }}
+          transition={{ duration: 0.3 }}
+          onClick={e => e.stopPropagation()}
+        >
+          {content}
+        </motion.div>
+      </PanelErrorBoundary>
+    )
+  }
+
+  // 使用完整的 BasePanel 包装
+  const fullBasePanelProps: BasePanelProps = {
+    id: basePanelProps.id,
+    position: basePanelProps.position,
+    size: basePanelProps.size,
+    title: basePanelProps.title,
+    onClose: basePanelProps.onClose,
+    onResize: basePanelProps.onResize,
+    onMove: basePanelProps.onMove,
+    children: null // 会被覆盖
+  }
+
   return (
-    <BasePanel {...basePanelProps} headerContent={headerContent}>
+    <BasePanel {...fullBasePanelProps} headerContent={headerContent}>
       <PanelErrorBoundary>
         <motion.div 
           className="h-full"

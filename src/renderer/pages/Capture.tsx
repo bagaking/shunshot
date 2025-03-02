@@ -4,7 +4,7 @@ import { ToolBar } from '../components/ToolBar'
 import { DebugPanel } from '../components/DebugPanel'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { useCapture } from '../hooks/useCapture'
-import { CaptureData, CaptureMode } from '../../types/capture'
+import { CaptureData, CaptureMode, ToolType } from '../../types/capture'
 import { translog } from '../utils/translog'
 import { performanceHelper } from '../utils/performanceHelper'
 import { eventHelper } from '../utils/eventHelper'
@@ -31,6 +31,17 @@ const Capture: React.FC = () => {
     getBoundsFromRect,
     handleOCR,
     resetSelection,
+    // 绘图相关
+    activeTool,
+    handleToolChange,
+    drawElements,
+    currentElement,
+    drawColor,
+    setDrawColor,
+    lineWidth,
+    setLineWidth,
+    mosaicSize,
+    setMosaicSize
   } = useCapture({ displayInfo, onDisplayInfoChange: setDisplayInfo })
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -68,13 +79,19 @@ const Capture: React.FC = () => {
     })
 
     try {
-      // 创建 Uint8ClampedArray 视图
+      // 创建 Uint8ClampedArray 视图并转换颜色空间
       const { width, height } = data.imageSize
-      const imageData = new ImageData(
-        new Uint8ClampedArray(data.imageBuffer),
-        width,
-        height
-      )
+      const buffer = new Uint8ClampedArray(data.imageBuffer.length)
+      
+      // 转换 BGRA 到 RGBA
+      for (let i = 0; i < data.imageBuffer.length; i += 4) {
+        buffer[i] = data.imageBuffer[i + 2]     // R <- B
+        buffer[i + 1] = data.imageBuffer[i + 1] // G <- G
+        buffer[i + 2] = data.imageBuffer[i]     // B <- R
+        buffer[i + 3] = data.imageBuffer[i + 3] // A <- A
+      }
+      
+      const imageData = new ImageData(buffer, width, height)
       
       // 使用 createImageBitmap 创建位图
       const bitmap = await createImageBitmap(imageData)
@@ -145,7 +162,11 @@ const Capture: React.FC = () => {
             getBoundsFromRect,
             setInitialCanvasState,
             setCanvasInfo,
-            startTime
+            startTime,
+            // 绘图相关
+            drawElements,
+            currentElement,
+            activeTool
           })
         })
 
@@ -154,7 +175,7 @@ const Capture: React.FC = () => {
         handleError(error as Error, 'updateCanvas')
       }
     }, 16),
-    [canvasRef, backgroundImage, displayInfo, selectedRect, getBoundsFromRect, handleError, captureMode, initialCanvasState]
+    [canvasRef, backgroundImage, displayInfo, selectedRect, getBoundsFromRect, handleError, captureMode, initialCanvasState, drawElements, currentElement, activeTool]
   )
 
   // 监听画布更新依赖项变化
@@ -311,6 +332,20 @@ const Capture: React.FC = () => {
     setCaptureMode(newIsScreenRecording ? CaptureMode.ScreenRecording : CaptureMode.Screenshot)
   }, [])
 
+  // 更新鼠标光标样式
+  const getCursorStyle = useCallback(() => {
+    switch (activeTool) {
+      case ToolType.Pencil:
+        return 'cursor-pencil'
+      case ToolType.Mosaic:
+        return 'cursor-crosshair'
+      case ToolType.Text:
+        return 'cursor-text'
+      default:
+        return 'cursor-crosshair'
+    }
+  }, [activeTool])
+
   return (
     <ErrorBoundary>
       <div className="fixed inset-0 select-none overflow-hidden w-screen h-screen bg-transparent">
@@ -332,7 +367,7 @@ const Capture: React.FC = () => {
 
         <canvas
           ref={canvasRef}
-          className="absolute top-0 left-0 w-full h-full cursor-crosshair"
+          className={`absolute top-0 left-0 w-full h-full ${getCursorStyle()}`}
           style={{
             zIndex: 1,
             backgroundColor: 'transparent'
@@ -379,6 +414,8 @@ const Capture: React.FC = () => {
                 selectedBounds={selectedRect ? getBoundsFromRect(selectedRect) : null}
                 isScreenRecording={captureMode === CaptureMode.ScreenRecording}
                 onModeChange={handleModeChange}
+                onToolChange={handleToolChange}
+                activeTool={activeTool}
               />
             </div>
           </>

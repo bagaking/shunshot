@@ -1,4 +1,4 @@
-import { NativeImage, screen, dialog } from 'electron'
+import { app, BrowserWindow, dialog, nativeImage, screen } from 'electron'
 import { Logger } from './logger'
 import { mgrWindows } from './mgrWindows'
 import { mgrCapture } from './mgrCapture'
@@ -7,42 +7,30 @@ import { mgrOCR } from './mgrOCR'
 import { mgrPreference } from './mgrPreference'
 import { mgrShortcut } from './mgrShortcut'
 import { IShunshotCoreAPI } from '../types/shunshotapi'
-import { Bounds } from '../common/2d'
-import { image } from '../common/2d'
+import { Bounds, image } from '../common/2d'
 import { mgrAgents } from './mgrAgents'
 import { AgentResult, AgentRunOptions } from '../types/agents'
+import { mgrConversation } from './mgrConversation'
 
-function MakeImage(bounds: Bounds): NativeImage | { error: string } {
+function MakeImage(bounds: Bounds): ReturnType<typeof nativeImage.createEmpty> | { error: string } {
   const currentData = mgrCapture.getCurrentData()
   if (!currentData) {
     Logger.error('No capture data available')
     return { error: 'No capture data available' }
   }
-
-  if (!currentData.fullImage) {
-    Logger.error('No image data available')
-    return { error: 'No image data available' }
-  }
-
   try {
+    
     // Log input validation
     Logger.debug({
       message: '[MkImg] Input validation',
       data: {
-        hasFullImage: !!currentData.fullImage,
-        fullImageSize: currentData.fullImage.getSize(),
-        displaySpaceBounds: bounds,
-        captureSpaceBounds: currentData.bounds
-      }
+        currentData: currentData,
+        bounds: bounds,
+      },
     })
 
     // 使用新的图像处理模块裁剪图像
-    const croppedImage = image.cropFromDisplay(
-      currentData.fullImage,
-      bounds,
-      currentData.bounds
-    )
-
+    const croppedImage = currentData.getFinalImage(bounds)
     if (!croppedImage) {
       Logger.error('Failed to crop image')
       return { error: 'Failed to crop image' }
@@ -105,16 +93,6 @@ export const handlers: IShunshotCoreAPI = {
     }
 
     try {
-      const croppedImage = image.cropFromDisplay(
-        currentData.fullImage,
-        bounds,
-        currentData.bounds
-      )
-      
-      // 将图像写入剪贴板
-      mgrClipboard.copyImage(croppedImage)
-      Logger.debug('Image copied to clipboard')
-
       // 获取窗口引用
       const captureWindow = mgrWindows.getCaptureWindow()
       if (!captureWindow) {
@@ -137,10 +115,6 @@ export const handlers: IShunshotCoreAPI = {
         Logger.error('Failed to hide window:', error)
       }
 
-      // 清理资源
-      mgrCapture.setCurrentData(null)
-      Logger.debug('Capture data cleared')
-
       // 在下一个事件循环中关闭窗口
       setImmediate(() => {
         try {
@@ -149,10 +123,15 @@ export const handlers: IShunshotCoreAPI = {
             Logger.debug('Capture window closed')
           }
           mgrWindows.setCaptureWindow(null)
+          
+          // 在窗口关闭后再清理资源，确保所有使用 CaptureData 的操作都已完成
+          mgrCapture.setCurrentData(null)
+          Logger.debug('Capture data cleared')
         } catch (error) {
           Logger.error('Error closing capture window:', error)
           // 即使关闭失败也清理引用
           mgrWindows.setCaptureWindow(null)
+          mgrCapture.setCurrentData(null)
         }
       })
 
@@ -165,7 +144,9 @@ export const handlers: IShunshotCoreAPI = {
     }
   },
 
-  copyToClipboard: async (bounds) => {
+
+
+  copyToClipboard: async (bounds: Bounds) => {
     Logger.log('Received COPY_TO_CLIPBOARD event')
     
     const currentData = mgrCapture.getCurrentData()
@@ -175,14 +156,56 @@ export const handlers: IShunshotCoreAPI = {
     }
 
     try {
-      const croppedImage = image.cropFromDisplay(
-        currentData.fullImage,
-        bounds,
-        currentData.bounds
-      )
-      mgrClipboard.copyImage(croppedImage)
+      const finalImage = currentData.getFinalImage(bounds)
+      if (finalImage) {
+        Logger.debug('Using final image for clipboard')
+        mgrClipboard.copyImage(finalImage)
+      } else {
+        Logger.error('No final image available')
+        return
+      }
     } catch (error) {
       Logger.error('Failed to copy to clipboard', error as Error)
+      throw error
+    }
+  },
+
+  saveAnnotatedImage: async (imageDataUrl, bounds) => {
+    Logger.log('Received SAVE_ANNOTATED_IMAGE event')
+    
+    try {
+      // Convert data URL to NativeImage
+      const base64Data = imageDataUrl.replace(/^data:image\/\w+;base64,/, '')
+      const buffer = Buffer.from(base64Data, 'base64')
+      const annotatedImage = nativeImage.createFromBuffer(buffer)
+      
+      // Validate the image
+      if (annotatedImage.isEmpty()) {
+        Logger.error('Annotated image is empty')
+        throw new Error('Annotated image is empty')
+      }
+      
+      const imageSize = annotatedImage.getSize()
+      Logger.debug({
+        message: 'Annotated image created',
+        data: {
+          imageSize,
+          bounds
+        }
+      })
+      
+      // Store the annotated image in the capture manager
+      mgrCapture.setAnnotatedImage(annotatedImage, bounds)
+      
+      Logger.debug({
+        message: 'Annotated image saved successfully',
+        data: {
+          imageSize,
+          bounds
+        }
+      })
+    } catch (error) {
+      Logger.error('Failed to save annotated image', error as Error)
       throw error
     }
   },
@@ -254,17 +277,23 @@ export const handlers: IShunshotCoreAPI = {
     }
   },
 
-  setWindowSize: async (width: number, height: number) => {
-    Logger.log(`Setting window size to ${width}x${height}`)
+  setWindowSize: async (width, height) => {
+    Logger.log('Received SET_WINDOW_SIZE event')
+    
     const mainWindow = mgrWindows.getMainWindow()
-    if (mainWindow) {
-      // 设置窗口大小，包括边框
-      mainWindow.setSize(width, height)
-      // 设置内容区域大小，不包括边框
+    if (!mainWindow) {
+      Logger.warn('No main window found')
+      return
+    }
+
+    try {
       mainWindow.setContentSize(width, height)
       // 由于窗口大小变化，需要重新计算位置以保持在右下角
       const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
       mainWindow.setPosition(screenWidth - width - 20, screenHeight - height - 20)
+    } catch (error) {
+      Logger.error('Failed to set window size', error as Error)
+      throw error
     }
   },
 
@@ -331,6 +360,37 @@ export const handlers: IShunshotCoreAPI = {
   // 系统相关
   platform: process.platform,
 
+  // 会话相关
+  getConversations: async () => {
+    Logger.log('Getting conversations list')
+    try {
+      return await mgrConversation.getConversations()
+    } catch (error) {
+      Logger.error('Failed to get conversations:', error)
+      throw error
+    }
+  },
+
+  getConversation: async (id: string) => {
+    Logger.log(`Getting conversation: ${id}`)
+    try {
+      return await mgrConversation.loadConversation(id)
+    } catch (error) {
+      Logger.error(`Failed to get conversation ${id}:`, error)
+      throw error
+    }
+  },
+
+  updateConversation: async (id: string, message: string, targetAgentId?: string) => {
+    Logger.log(`Updating conversation: ${id}`)
+    try {
+      return await mgrConversation.updateConversationWithMessage(id, message, targetAgentId)
+    } catch (error) {
+      Logger.error(`Failed to update conversation ${id}:`, error)
+      throw error
+    }
+  },
+
   // Agent 相关方法
   getAgents: async () => {
     return mgrAgents.getAgents()
@@ -352,10 +412,15 @@ export const handlers: IShunshotCoreAPI = {
     console.log('Received agent request')
     
     try {
-      // Get cropped image
-      const result = await MakeImage(options.selectedBounds)
-      if ('error' in result) {
-        return { error: result.error }
+      let croppedImage = null;
+
+      // Only get cropped image for new conversations
+      if (!options.conversationId) {
+        const result = await MakeImage(options.selectedBounds)
+        if ('error' in result) {
+          return { error: result.error }
+        }
+        croppedImage = result;
       }
 
       // Sanitize messages to ensure they are serializable
@@ -390,7 +455,7 @@ export const handlers: IShunshotCoreAPI = {
       }
 
       // Run agent with sanitized options
-      const agentResult = await mgrAgents.runAgent(id, result, sanitizedOptions)
+      const agentResult = await mgrAgents.runAgent(id, croppedImage, sanitizedOptions)
 
       // Ensure the response is serializable
       return {

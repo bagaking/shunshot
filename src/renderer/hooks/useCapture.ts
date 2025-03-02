@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { DisplayInfo } from '../../types/capture'
+import { DisplayInfo, ToolType, DrawElementUnion } from '../../types/capture'
 import { debugHelper } from '../utils/DebugHelper'
 import { translog } from '../utils/translog'
 import { Point, Rect, Bounds, coordinates } from '../../common/2d'
+import { useDrawing } from './useDrawing'
 
 interface UseCaptureProps {
   displayInfo: DisplayInfo | null
@@ -18,13 +19,7 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
   const [selectedRect, setSelectedRect] = useState<Rect | null>(null)
   const [mousePosition, setMousePosition] = useState<Point>({ x: 0, y: 0 })
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
-
-  // 坐标限制
-  const clampCoordinates = useCallback((x: number, y: number): Point => {
-    if (!displayInfo) return { x, y }
-    return coordinates.clamp({ x, y }, displayInfo.bounds)
-  }, [displayInfo])
-
+  
   // 获取选区边界
   const getBoundsFromRect = useCallback((canvasSpaceRect: Rect): Bounds => {
     try {
@@ -41,6 +36,18 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
       return { x: 0, y: 0, width: 0, height: 0 }
     }
   }, [])
+  
+  // 使用 useDrawing hook 管理绘图相关状态，传入选区边界和显示信息
+  const drawing = useDrawing(
+    selectedRect ? getBoundsFromRect(selectedRect) : null,
+    displayInfo
+  )
+
+  // 坐标限制
+  const clampCoordinates = useCallback((x: number, y: number): Point => {
+    if (!displayInfo) return { x, y }
+    return coordinates.clamp({ x, y }, displayInfo.bounds)
+  }, [displayInfo])
 
   // 完成截图
   const completeCapture = useCallback(
@@ -53,15 +60,33 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
           displayInfo
         })
 
-        await performCapture(bounds)
+        // 如果有绘图元素，需要先将带有绘图的图像保存到主进程
+        if (drawing.drawElements.length > 0) {
+          try {
+            // 使用 useDrawing hook 中的 saveAnnotatedImage 函数保存带有标注的图像
+            await drawing.saveAnnotatedImage()
+            
+            translog.debug('Annotated image sent to main process', {
+              hasDrawElements: drawing.drawElements.length > 0,
+              bounds
+            })
+          } catch (error) {
+            translog.error('Failed to save annotated image:', error)
+            // 即使保存带注释的图像失败，也继续执行截图
+          }
+        }
+
+        // 修改调用顺序：先复制到剪贴板，再完成截图
+        // 这样可以确保在 completeCapture 清理数据之前，copyToClipboard 已经使用了数据
         await window.shunshotCoreAPI.copyToClipboard(bounds)
+        await performCapture(bounds)
         
         onComplete?.()
       } catch (error) {
         translog.error('Failed to complete capture', error as Error)
       }
     },
-    [displayInfo, onComplete]
+    [displayInfo, onComplete, drawing.drawElements, drawing.saveAnnotatedImage]
   )
 
   // 获取缩放后的边界
@@ -76,7 +101,6 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
   const performCapture = async (scaledBounds: Bounds) => {
     translog.debug('Scaled bounds calculated', { scaledBounds })
     await window.shunshotCoreAPI.hideWindow()
-    await window.shunshotCoreAPI.copyToClipboard(scaledBounds)
     await window.shunshotCoreAPI.completeCapture(scaledBounds)
   }
 
@@ -274,29 +298,43 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
       const canvasSpacePoint = clampCoordinates(e.clientX, e.clientY)
       translog.debug('Mouse down in canvas space', { 
         canvasSpace: canvasSpacePoint,
-        rawClient: { x: e.clientX, y: e.clientY }
+        rawClient: { x: e.clientX, y: e.clientY },
+        activeTool: drawing.activeTool
       })
       
-      setIsSelecting(true)
-      setStartPoint(canvasSpacePoint)
-      setSelectedRect(null)
+      // 根据当前工具处理鼠标按下事件
+      if (drawing.activeTool === ToolType.None || 
+          drawing.activeTool === ToolType.RectSelect || 
+          drawing.activeTool === ToolType.EllipseSelect) {
+        // 默认选区工具
+        setIsSelecting(true)
+        setStartPoint(canvasSpacePoint)
+        setSelectedRect(null)
+      } else {
+        // 绘图工具
+        drawing.startDrawing(canvasSpacePoint)
+      }
     } catch (error) {
       translog.error('Error during mouse down:', error)
     }
-  }, [clampCoordinates])
+  }, [clampCoordinates, drawing])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     try {
       const canvasSpacePoint = clampCoordinates(e.clientX, e.clientY)
       setMousePosition(canvasSpacePoint)
       
-      if (!isSelecting || !startPoint) return
-
-      updateCanvasSpaceSelection(canvasSpacePoint.x, canvasSpacePoint.y)
+      if (isSelecting && startPoint) {
+        // 更新选区
+        updateCanvasSpaceSelection(canvasSpacePoint.x, canvasSpacePoint.y)
+      } else if (drawing.isDrawing) {
+        // 更新绘制
+        drawing.updateCurrentElement(canvasSpacePoint)
+      }
     } catch (error) {
       translog.error('Error during mouse move:', error)
     }
-  }, [isSelecting, startPoint, clampCoordinates])
+  }, [isSelecting, startPoint, clampCoordinates, drawing])
 
   // 更新选区
   const updateCanvasSpaceSelection = (x: number, y: number) => {
@@ -325,9 +363,16 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
   }
 
   const handleMouseUp = useCallback(() => {
-    console.debug('[renderer] Mouse up, ending selection')
-    setIsSelecting(false)
-  }, [])
+    console.debug('[renderer] Mouse up, ending selection/drawing')
+    
+    if (isSelecting) {
+      setIsSelecting(false)
+    }
+    
+    if (drawing.isDrawing) {
+      drawing.finishDrawing()
+    }
+  }, [isSelecting, drawing])
 
   // 重置选区
   const resetSelection = useCallback(() => {
@@ -335,7 +380,8 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
     setIsSelecting(false)
     setStartPoint(null)
     setSelectedRect(null)
-  }, [])
+    drawing.resetDrawing()
+  }, [drawing])
 
   // 设置键盘事件监听
   useEffect(() => {
@@ -366,5 +412,16 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
     getBoundsFromRect,
     handleOCR,
     resetSelection,
+    // 绘图相关 - 从 drawing 中导出
+    activeTool: drawing.activeTool,
+    handleToolChange: drawing.handleToolChange,
+    drawElements: drawing.drawElements,
+    currentElement: drawing.currentElement,
+    drawColor: drawing.drawColor,
+    setDrawColor: drawing.setDrawColor,
+    lineWidth: drawing.lineWidth,
+    setLineWidth: drawing.setLineWidth,
+    mosaicSize: drawing.mosaicSize,
+    setMosaicSize: drawing.setMosaicSize
   }
 } 

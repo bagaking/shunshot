@@ -62,6 +62,11 @@ export class ShunshotCoreBridge extends Bridge<IShunshotCoreAPI> {
       updateAgent: async () => false,
       runAgent: async () => ({}),
 
+      // 会话相关
+      getConversations: async () => [],
+      getConversation: async () => null,
+      updateConversation: async () => ({}),
+
       // 日志相关
       mainLog: {
         log: (..._args: any[]) => {},
