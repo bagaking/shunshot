@@ -216,12 +216,25 @@ export const image = {
       captureSize,
       imageSize
     )
+    return this.cropImage(fullImage, imageSpaceBounds)
+  },
 
+  // Helper method to compare bounds
+  boundsEqual(bounds1: Bounds, bounds2: Bounds): boolean {
+    return (
+      bounds1.x === bounds2.x &&
+      bounds1.y === bounds2.y &&
+      bounds1.width === bounds2.width &&
+      bounds1.height === bounds2.height
+    )
+  },
+
+  // Helper method to crop image
+  cropImage(image: NativeImage, bounds: Bounds): NativeImage {
+    const imageSize = image.getSize()
     // Validate and clamp bounds
-    const validBounds = this.validateBounds(imageSpaceBounds, imageSize)
-
-    // Return cropped image
-    return fullImage.crop(validBounds)
+    const validBounds = this.validateBounds(bounds, imageSize)
+    return image.crop(validBounds)
   },
 
   /**

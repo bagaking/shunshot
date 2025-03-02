@@ -8,45 +8,25 @@
       body {
         margin: 0;
         padding: 0;
-        background: transparent;
+        background: #f9fafb;
         overflow: hidden;
-        user-select: none;
-        -webkit-user-select: none;
       }
       #root {
-        position: fixed;
-        top: 0;
-        left: 0;
         width: 100vw;
         height: 100vh;
       }
 
       /* 确保所有元素都能正确显示 */
-      .fixed {
-        position: fixed !important;
-      }
-      .absolute {
-        position: absolute !important;
-      }
- 
       .select-none {
-        user-select: none !important;
-        -webkit-user-select: none !important;
+        user-select: none;
+        -webkit-user-select: none;
       }
 
       .pointer-events-none {
-        pointer-events: none !important;
+        pointer-events: none;
       }
       .pointer-events-auto {
-        pointer-events: auto !important;
-      }
-
-      /* 窗口拖拽区域 */
-      .drag-region {
-        -webkit-app-region: drag;
-      }
-      .no-drag {
-        -webkit-app-region: no-drag;
+        pointer-events: auto;
       }
     </style>
     <script>
@@ -86,11 +66,6 @@
           timestamp: Date.now()
         }));
       });
-
-      // 禁用默认的右键菜单
-      window.addEventListener('contextmenu', (e) => {
-        e.preventDefault()
-      })
     </script>
   </head>
   <body>

@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { AgentConfig, AgentMessage, ChatCompletionContentPart } from '../../types/agents'
 import { Bounds } from '../../common/2d'
 import { message as antdMessage } from 'antd' 
 import { usePanelManager } from '../panels/PanelManager' 
 import { translog } from '../utils/translog'
-import { Square, Circle, Pencil, Grid } from 'lucide-react'
-import { EditOutlined, FileSearchOutlined, VideoCameraOutlined, CameraOutlined, RobotOutlined, CloseOutlined, CheckOutlined } from '@ant-design/icons'
+import { Pencil, Grid, Type, ScanText, FileText } from 'lucide-react'
+import { EditOutlined, FileSearchOutlined, VideoCameraOutlined, CameraOutlined, RobotOutlined, CloseOutlined, CheckOutlined, FontSizeOutlined, BlockOutlined, ScanOutlined } from '@ant-design/icons'
 import { MessageService } from '../services/messageService'
+import { ToolType, PenStyle } from '../../types/capture'
+
+import { BrushSettings } from './BrushSettings'
 
 interface ToolBarProps {
   onConfirm: () => void
@@ -15,6 +18,14 @@ interface ToolBarProps {
   selectedBounds: Bounds | null
   isScreenRecording?: boolean
   onModeChange?: (isScreenRecording: boolean) => void
+  onToolChange?: (tool: ToolType) => void
+  activeTool?: ToolType
+  drawColor?: string
+  onColorChange?: (color: string) => void
+  lineWidth?: number
+  onLineWidthChange?: (width: number) => void
+  penStyle?: PenStyle
+  onPenStyleChange?: (style: PenStyle, sensitivity?: number, taper?: boolean) => void
 }
 
 interface ToolButton {
@@ -23,6 +34,9 @@ interface ToolButton {
   onClick?: () => void
   primary?: boolean
   disabled?: boolean
+  toolType?: ToolType
+  isActive?: boolean
+  showSettingsOnHover?: boolean
 }
  
 const AgentMenu: React.FC<{
@@ -67,12 +81,23 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   onOCR,
   selectedBounds,
   isScreenRecording = false,
-  onModeChange
+  onModeChange,
+  onToolChange,
+  activeTool = ToolType.None,
+  drawColor = '#e53e3e',
+  onColorChange,
+  lineWidth = 2,
+  onLineWidthChange,
+  penStyle = PenStyle.Normal,
+  onPenStyleChange
 }) => {
   const [activeTooltip, setActiveTooltip] = useState<string>('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [showAgentMenu, setShowAgentMenu] = useState(false)
+  const [showBrushSettings, setShowBrushSettings] = useState(false)
   const panelManager = usePanelManager()
+  const pencilButtonRef = useRef<HTMLDivElement>(null)
+  const brushSettingsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   const handleOCR = async () => {
     if (!selectedBounds) {
@@ -198,6 +223,82 @@ export const ToolBar: React.FC<ToolBarProps> = ({
     }
   }
 
+  // 处理工具选择
+  const handleToolSelect = (toolType: ToolType) => {
+    if (onToolChange) {
+      translog.debug('Tool selected:', { toolType })
+      onToolChange(toolType)
+    }
+  }
+
+  // 处理颜色选择
+  const handleColorSelect = (color: string) => {
+    if (onColorChange) {
+      translog.debug('Color selected:', { color })
+      onColorChange(color)
+      
+      // 当用户选择颜色时，自动选中画笔工具
+      if (activeTool !== ToolType.Pencil) {
+        handleToolSelect(ToolType.Pencil)
+      }
+    }
+  }
+
+  // 处理线宽变化
+  const handleLineWidthChange = (width: number) => {
+    if (onLineWidthChange) {
+      translog.debug('Line width changed:', { width })
+      onLineWidthChange(width)
+      
+      // 当用户调整线宽时，自动选中画笔工具
+      if (activeTool !== ToolType.Pencil) {
+        handleToolSelect(ToolType.Pencil)
+      }
+    }
+  }
+
+  // 处理笔触风格变化
+  const handlePenStyleChange = (style: PenStyle, sensitivity?: number, taper?: boolean) => {
+    if (onPenStyleChange) {
+      translog.debug('Pen style changed:', { style, sensitivity, taper })
+      onPenStyleChange(style, sensitivity, taper)
+      
+      // 当用户调整笔触风格时，自动选中画笔工具
+      if (activeTool !== ToolType.Pencil) {
+        handleToolSelect(ToolType.Pencil)
+      }
+    }
+  }
+
+  // 处理画笔按钮悬停
+  const handlePencilHover = (isHovering: boolean) => {
+    if (brushSettingsTimeoutRef.current) {
+      clearTimeout(brushSettingsTimeoutRef.current);
+      brushSettingsTimeoutRef.current = null;
+    }
+
+    if (isHovering) {
+      // 短暂延迟显示设置面板，避免意外触发
+      brushSettingsTimeoutRef.current = setTimeout(() => {
+        setShowBrushSettings(true);
+      }, 300);
+    } else {
+      // 延迟隐藏，以便用户可以移动到设置面板上
+      brushSettingsTimeoutRef.current = setTimeout(() => {
+        setShowBrushSettings(false);
+      }, 300);
+    }
+  };
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (brushSettingsTimeoutRef.current) {
+        clearTimeout(brushSettingsTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const tools: ToolButton[] = [
     {
       tooltip: 'Agents',
@@ -207,29 +308,69 @@ export const ToolBar: React.FC<ToolBarProps> = ({
     },
     {
       tooltip: '识别内容',
-      icon: <FileSearchOutlined spin={isProcessing} />,
+      icon: <ScanOutlined spin={isProcessing} />,
       onClick: handleOCR,
       disabled: !selectedBounds || isProcessing
     },
     {
-      tooltip: '矩形选择',
-      icon: <Square className="w-3.5 h-3.5" />,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        </svg>
+      ),
+      tooltip: '矩形',
+      toolType: ToolType.Rectangle,
+      isActive: activeTool === ToolType.Rectangle,
+      onClick: () => handleToolSelect(ToolType.Rectangle),
+      disabled: !selectedBounds || isProcessing
     },
     {
-      tooltip: '椭圆选择',
-      icon: <Circle className="w-3.5 h-3.5" />,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+        </svg>
+      ),
+      tooltip: '椭圆',
+      toolType: ToolType.Ellipse,
+      isActive: activeTool === ToolType.Ellipse,
+      onClick: () => handleToolSelect(ToolType.Ellipse),
+      disabled: !selectedBounds || isProcessing
     },
     {
       tooltip: '画笔',
-      icon: <Pencil className="w-3.5 h-3.5" />,
+      icon: (
+        <div className="relative flex items-center justify-center">
+          <Pencil className={`w-3.5 h-3.5 ${activeTool === ToolType.Pencil ? '' : 'text-gray-500'}`} 
+                 style={activeTool === ToolType.Pencil ? { color: drawColor } : {}} />
+          {activeTool === ToolType.Pencil && (
+            <div 
+              className="absolute -bottom-1 -right-1 w-2 h-2 rounded-full border border-white"
+              style={{ backgroundColor: drawColor }}
+            />
+          )}
+        </div>
+      ),
+      toolType: ToolType.Pencil,
+      isActive: activeTool === ToolType.Pencil,
+      onClick: () => handleToolSelect(ToolType.Pencil),
+      disabled: !selectedBounds || isProcessing,
+      showSettingsOnHover: true
     },
     {
       tooltip: '马赛克',
-      icon: <Grid className="w-3.5 h-3.5" />,
+      icon: <BlockOutlined className="text-lg" />,
+      toolType: ToolType.Mosaic,
+      isActive: activeTool === ToolType.Mosaic,
+      onClick: () => handleToolSelect(ToolType.Mosaic),
+      disabled: !selectedBounds || isProcessing
     },
     {
       tooltip: '文字',
-      icon: <EditOutlined />,
+      icon: <FontSizeOutlined className="text-lg" />,
+      toolType: ToolType.Text,
+      isActive: activeTool === ToolType.Text,
+      onClick: () => handleToolSelect(ToolType.Text),
+      disabled: !selectedBounds || isProcessing
     },
     {
       tooltip: isScreenRecording ? '切换到截图' : '切换到录屏',
@@ -258,15 +399,31 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         {/* 工具按钮组 */}
         <div className="flex items-center space-x-0.5">
           {tools.map((tool, index) => (
-            <div key={index} className="relative group">
+            <div 
+              key={index} 
+              className="relative group"
+              ref={tool.tooltip === '画笔' ? pencilButtonRef : undefined}
+              onMouseEnter={() => {
+                setActiveTooltip(tool.tooltip);
+                if (tool.showSettingsOnHover) {
+                  handlePencilHover(true);
+                }
+              }}
+              onMouseLeave={() => {
+                setActiveTooltip('');
+                if (tool.showSettingsOnHover) {
+                  handlePencilHover(false);
+                }
+              }}
+            >
               <button
-                className={`w-7 h-7 rounded-md flex items-center justify-center text-gray-500 transition-colors duration-150 ${
+                className={`w-7 h-7 rounded-md flex items-center justify-center transition-all duration-200 ${
                   tool.disabled 
                     ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:text-gray-900 active:text-blue-600'
+                    : tool.isActive
+                      ? 'bg-blue-100 text-blue-600 shadow-sm transform scale-105'
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50 active:text-blue-600'
                 }`}
-                onMouseEnter={() => setActiveTooltip(tool.tooltip)}
-                onMouseLeave={() => setActiveTooltip('')}
                 onClick={tool.onClick}
                 disabled={tool.disabled}
               >
@@ -282,6 +439,29 @@ export const ToolBar: React.FC<ToolBarProps> = ({
             </div>
           ))}
         </div>
+
+        {/* 画笔设置面板 */}
+        {showBrushSettings && (
+          <div 
+            className="absolute z-50"
+            style={{ 
+              top: pencilButtonRef.current ? pencilButtonRef.current.offsetTop + pencilButtonRef.current.offsetHeight : 0,
+              left: pencilButtonRef.current ? pencilButtonRef.current.offsetLeft : 0
+            }}
+            onMouseEnter={() => handlePencilHover(true)}
+            onMouseLeave={() => handlePencilHover(false)}
+          >
+            <BrushSettings
+              onClose={() => setShowBrushSettings(false)}
+              onColorSelect={handleColorSelect}
+              onLineWidthChange={handleLineWidthChange}
+              onPenStyleChange={handlePenStyleChange}
+              currentColor={drawColor}
+              currentLineWidth={lineWidth}
+              currentPenStyle={penStyle}
+            />
+          </div>
+        )}
 
         {/* Agent菜单 */}
         {showAgentMenu && (

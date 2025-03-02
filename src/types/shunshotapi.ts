@@ -1,6 +1,13 @@
-import { AgentConfig, AgentResult, AgentRunOptions } from './agents'
+import { AgentConfig, AgentResult, AgentRunOptions, Conversation } from './agents'
 import { Bounds } from '../common/2d'
 import { OpenDialogOptions, OpenDialogReturnValue } from 'electron'
+
+export interface ConversationListItem {
+  id: string
+  agentId: string
+  preview: string
+  timestamp: number
+}
 
 export interface IShunshotCoreAPI {
   // 截图相关
@@ -10,6 +17,7 @@ export interface IShunshotCoreAPI {
   onCleanupComplete: (callback: () => void) => () => void
   completeCapture: (bounds: Bounds) => Promise<void>
   copyToClipboard: (bounds: Bounds) => Promise<void>
+  saveAnnotatedImage: (imageDataUrl: string, bounds: Bounds) => Promise<void>
   cancelCapture: () => void
 
   // 窗口相关
@@ -39,6 +47,11 @@ export interface IShunshotCoreAPI {
   updateAgent: (id: string, config: Partial<AgentConfig>) => Promise<boolean>
   deleteAgent: (id: string) => Promise<boolean>
   runAgent: (id: string, options: AgentRunOptions) => Promise<AgentResult>
+
+  // 会话相关
+  getConversations: () => Promise<ConversationListItem[]>
+  getConversation: (id: string) => Promise<Conversation | null>
+  updateConversation: (id: string, message: string, targetAgentId?: string) => Promise<Conversation>
 } 
 
 declare global {

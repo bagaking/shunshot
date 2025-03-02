@@ -1,6 +1,7 @@
-import { DisplayInfo, Rect, CaptureMode } from '../../types/capture'
+import { DisplayInfo, Rect, CaptureMode, DrawElementUnion, ToolType } from '../../types/capture'
 import { translog } from './translog'
 import { Bounds, coordinates } from '../../common/2d'
+import { drawingHelper } from './drawingHelper'
 
 interface RenderConfig {
   canvas: HTMLCanvasElement
@@ -21,6 +22,10 @@ interface RenderConfig {
     }
   }) => void
   startTime: number
+  // 绘图相关
+  drawElements?: DrawElementUnion[]
+  currentElement?: DrawElementUnion | null
+  activeTool?: ToolType
 }
 
 export const canvasRenderHelper = {
@@ -318,7 +323,11 @@ export const canvasRenderHelper = {
       getBoundsFromRect,
       setInitialCanvasState,
       setCanvasInfo,
-      startTime
+      startTime,
+      // 绘图相关
+      drawElements = [],
+      currentElement = null,
+      activeTool = ToolType.None
     } = config
 
     // 只在初始化或尺寸变化时设置画布尺寸
@@ -427,6 +436,32 @@ export const canvasRenderHelper = {
           deviceSpaceBounds.width,
           deviceSpaceBounds.height
         )
+      }
+      
+      // 绘制所有绘图元素
+      if (drawElements.length > 0 || currentElement) {
+        // 裁剪到选区内
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(
+          deviceSpaceBounds.x,
+          deviceSpaceBounds.y,
+          deviceSpaceBounds.width,
+          deviceSpaceBounds.height
+        )
+        ctx.clip()
+        
+        // 使用 drawingHelper 绘制元素
+        drawingHelper.drawElements(
+          ctx,
+          drawElements,
+          currentElement,
+          canvas,
+          initialCanvasState,
+          displayInfo.scaleFactor
+        )
+        
+        ctx.restore()
       }
       
       // 使用设备空间坐标绘制边框

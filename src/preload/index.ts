@@ -17,6 +17,7 @@ const createSecureIPC = () => {
     `${SHUNSHOT_BRIDGE_PREFIX}:completeCapture`,
     `${SHUNSHOT_BRIDGE_PREFIX}:cancelCapture`,
     `${SHUNSHOT_BRIDGE_PREFIX}:copyToClipboard`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:saveAnnotatedImage`,
     `${SHUNSHOT_BRIDGE_PREFIX}:hideWindow`,
     `${SHUNSHOT_BRIDGE_PREFIX}:showWindow`,
     `${SHUNSHOT_BRIDGE_PREFIX}:setWindowSize`,
@@ -33,6 +34,9 @@ const createSecureIPC = () => {
     `${SHUNSHOT_BRIDGE_PREFIX}:createAgent`,
     `${SHUNSHOT_BRIDGE_PREFIX}:deleteAgent`,
     `${SHUNSHOT_BRIDGE_PREFIX}:showOpenDialog`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:getConversations`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:getConversation`,
+    `${SHUNSHOT_BRIDGE_PREFIX}:updateConversation`,
   ]
 
   return {
@@ -104,6 +108,10 @@ const createCoreAPI = (secureIPC: ReturnType<typeof createSecureIPC>): IShunshot
       console.debug('[Preload] Invoking copyToClipboard')
       return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:copyToClipboard`, bounds)
     },
+    saveAnnotatedImage: async (imageDataUrl, bounds) => {
+      console.debug('[Preload] Invoking saveAnnotatedImage')
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:saveAnnotatedImage`, imageDataUrl, bounds)
+    },
     hideWindow: async () => {
       console.debug('[Preload] Invoking hideWindow')
       return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:hideWindow`)
@@ -164,6 +172,18 @@ const createCoreAPI = (secureIPC: ReturnType<typeof createSecureIPC>): IShunshot
       console.debug('[Preload] Invoking showOpenDialog', { options })
       return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:showOpenDialog`, options)
     },
+    getConversations: async () => {
+      console.debug('[Preload] Invoking getConversations')
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:getConversations`)
+    },
+    getConversation: async (id: string) => {
+      console.debug('[Preload] Invoking getConversation', { id })
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:getConversation`, id)
+    },
+    updateConversation: async (id: string, message: string, targetAgentId?: string) => {
+      console.debug('[Preload] Invoking updateConversation', { id })
+      return secureIPC.invoke(`${SHUNSHOT_BRIDGE_PREFIX}:updateConversation`, id, message, targetAgentId)
+    },
   }
 }
 
@@ -209,6 +229,9 @@ try {
     deleteAgent: async () => { throw new Error('API not available') },
     updateAgent: async () => { throw new Error('API not available') },
     runAgent: async () => { throw new Error('API not available') },
+    getConversations: async () => { throw new Error('API not available') },
+    getConversation: async () => { throw new Error('API not available') },
+    updateConversation: async () => { throw new Error('API not available') },
   }
 
   contextBridge.exposeInMainWorld('translogAPI', {

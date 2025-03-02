@@ -4,15 +4,49 @@ import { Logger } from './logger'
 import { mgrWindows } from './mgrWindows'
 import { SHUNSHOT_BRIDGE_PREFIX } from '../types/shunshotBridge'
 import { CaptureData } from '../types/capture'
+import { Bounds, image } from '../common/2d'
+
+export class CaptureImageData {
+  public fullImage?: NativeImage;
+  public bounds?: Bounds;
+  public annotatedImage?: NativeImage;
+  public annotatedBounds?: Bounds;
+
+  constructor(data: {
+    fullImage?: NativeImage;
+    bounds?: Bounds;
+    annotatedImage?: NativeImage;
+    annotatedBounds?: Bounds;
+  }) {
+    this.fullImage = data?.fullImage;
+    this.bounds = data?.bounds;
+    this.annotatedImage = data?.annotatedImage;
+    this.annotatedBounds = data?.annotatedBounds;
+  }
+
+  getFinalImage(bounds: Bounds): NativeImage {
+    if (this.annotatedImage) {
+      return this.annotatedImage;
+    }
+
+    if (!this.fullImage) {
+      throw new Error('No full image available')
+    }
+
+    const croppedImage = image.cropFromDisplay(
+      this.fullImage,
+      bounds,
+      this.bounds
+    )
+    return croppedImage
+  }
+} 
 
 /**
  * 截图管理器
  */
 export class CaptureManager {
-  private currentData: {
-    fullImage: NativeImage;
-    bounds: { x: number; y: number; width: number; height: number };
-  } | null = null
+  private currentData: CaptureImageData | null = null
 
   private startSubscribers: Set<() => void> = new Set()
   private dataSubscribers: Set<(data: CaptureData) => void> = new Set()
@@ -24,7 +58,7 @@ export class CaptureManager {
   private readonly MAX_RETRIES = 2;
   private readonly RETRY_DELAY = 500; // 0.5 second
 
-  getCurrentData() {
+  getCurrentData(): CaptureImageData {
     return this.currentData
   }
 
@@ -77,11 +111,52 @@ export class CaptureManager {
     fullImage: NativeImage;
     bounds: { x: number; y: number; width: number; height: number };
   } | null) {
-    this.currentData = data
+    this.currentData = new CaptureImageData(data)
     if (data === null) {
       // 当数据被清理时通知订阅者
       this.notifyCleanupSubscribers()
     }
+  }
+
+  /**
+   * 设置带有标注的图像
+   * @param annotatedImage 带有标注的图像
+   * @param bounds 图像边界
+   */
+  setAnnotatedImage(
+    annotatedImage: NativeImage,
+    bounds: { x: number; y: number; width: number; height: number }
+  ) {
+    if (!this.currentData) {
+      Logger.warn('Cannot set annotated image: no current data')
+      return
+    }
+    
+    this.currentData = new CaptureImageData({
+      ...this.currentData,
+      annotatedImage,
+      annotatedBounds: bounds
+    })
+    
+    Logger.debug({
+      message: 'Annotated image set',
+      data: {
+        hasAnnotatedImage: !!annotatedImage,
+        bounds
+      }
+    })
+  }
+
+  /**
+   * 获取带有标注的图像
+   * @returns 带有标注的图像，如果不存在则返回原始图像
+   */
+  getAnnotatedImage() {
+    if (!this.currentData) {
+      return null
+    }
+    
+    return this.currentData.annotatedImage || this.currentData.fullImage
   }
 
   /**

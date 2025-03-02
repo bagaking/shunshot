@@ -94,6 +94,26 @@ export class ProjectManager {
   }
 
   /**
+   * Generate a path for a conversation file (synchronous version)
+   * @param conversationId Optional conversation ID
+   * @returns Path or null if project not configured
+   */
+  createConversationPathSync(conversationId?: string): string | null {
+    const paths = this.getPaths();
+    if (!paths) {
+      Logger.info('Conversation auto-save disabled: project not configured');
+      return null;
+    }
+
+    // Ensure filename has .json extension
+    const filename = conversationId 
+      ? `${conversationId}.json`
+      : `conversation-${Date.now()}.json`;
+
+    return path.join(paths.conversations, filename);
+  }
+
+  /**
    * Save a conversation to the project
    * @param conversation The conversation to save
    * @returns true if saved successfully, false if project not configured

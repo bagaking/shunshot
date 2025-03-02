@@ -19,6 +19,7 @@
     "@types/fabric": "^5.3.9",
     "@types/react-mentions": "^4.4.1",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "@types/uuid": "^10.0.0",
     "antd": "^5.24.1",
     "ast-to-react": "link:react-markdown/lib/ast-to-react",
     "electron-store": "6.0.1",
@@ -40,6 +41,7 @@
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "styled-components": "^6.1.0",
+    "uuid": "^11.1.0",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

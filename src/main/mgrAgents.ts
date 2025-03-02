@@ -1,10 +1,11 @@
 import OpenAI from 'openai'
-import { AgentConfig, AgentResult, AgentRunOptions, DEFAULT_AGENTS, AgentMessage, AgentModelGene, validGenes } from '../types/agents'
+import { AgentConfig, AgentResult, AgentRunOptions, DEFAULT_AGENTS, AgentMessage, AgentModelGene, validGenes, Conversation } from '../types/agents'
 import { mgrPreference } from './mgrPreference'
 import { Logger } from './logger' 
 import { image } from '../common/2d'
 import { NativeImage } from 'electron'
 import { ConversationManager } from './mgrConversation'
+import { RateLimiter } from './utils/RateLimiter'
 
 interface ModelConfig {
   apiKey: string
@@ -156,8 +157,11 @@ class AgentConfigManager {
 }
 
 // OpenAI client manager
-class OpenAIClientManager {
+export class OpenAIClientManager {
   private clients: Map<string, OpenAI | null> = new Map()
+  private rateLimiters: Map<string, RateLimiter> = new Map()
+  private readonly MAX_RETRIES = 3
+  private readonly RETRY_DELAY = 1000 // 1 second
 
   constructor() {
     this.initialize()
@@ -171,13 +175,22 @@ class OpenAIClientManager {
 
   private async initialize() {
     try {
+      // Initialize clients and rate limiters for each type
       await this.initializeClient('vision')
       await this.initializeClient('reasoning')
       await this.initializeClient('standard')
-      Logger.log('OpenAI clients initialized')
+
+      // Initialize rate limiters with conservative limits
+      // 50 requests per minute (1.2s interval)
+      this.rateLimiters.set('vision', new RateLimiter(50, 1, 1200))
+      this.rateLimiters.set('reasoning', new RateLimiter(50, 1, 1200))
+      this.rateLimiters.set('standard', new RateLimiter(50, 1, 1200))
+
+      Logger.log('OpenAI clients and rate limiters initialized')
     } catch (error) {
       Logger.error('Failed to initialize OpenAI clients', error as Error)
       this.clients.clear()
+      this.rateLimiters.clear()
     }
   }
 
@@ -189,6 +202,62 @@ class OpenAIClientManager {
     }) : null)
   }
 
+  /**
+   * Get a client with rate limiting and retries
+   */
+  async getClientWithRetry(type: AgentModelGene): Promise<OpenAI> {
+    const client = this.clients.get(type)
+    if (!client) {
+      throw new ClientError(`OpenAI client not initialized: ${type}`)
+    }
+
+    const rateLimiter = this.rateLimiters.get(type)
+    if (!rateLimiter) {
+      throw new ClientError(`Rate limiter not initialized: ${type}`)
+    }
+
+    // Try to acquire a token with timeout
+    const acquired = await rateLimiter.acquire()
+    if (!acquired) {
+      throw new ClientError(`Rate limit exceeded for ${type}`)
+    }
+
+    return client
+  }
+
+  /**
+   * Execute an OpenAI API call with retries
+   */
+  async executeWithRetry<T>(
+    type: AgentModelGene,
+    operation: (client: OpenAI) => Promise<T>
+  ): Promise<T> {
+    let lastError: Error | null = null
+
+    for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        const client = await this.getClientWithRetry(type)
+        return await operation(client)
+      } catch (error) {
+        lastError = error as Error
+        Logger.warn(`API call attempt ${attempt} failed: ${error}`)
+
+        // Check if we should retry
+        if (attempt < this.MAX_RETRIES) {
+          const delay = this.RETRY_DELAY * attempt // Exponential backoff
+          Logger.log(`Retrying in ${delay}ms...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
+      }
+    }
+
+    throw lastError || new Error('Operation failed after retries')
+  }
+
+  /**
+   * Get a client for immediate use (no rate limiting)
+   * @deprecated Use getClientWithRetry instead
+   */
   getClient(type: AgentModelGene): OpenAI {
     const client = this.clients.get(type)
     if (!client) {
@@ -206,38 +275,22 @@ class AgentRunner {
     private conversationManager: ConversationManager
   ) {}
 
-  async runAgent(id: string, croppedImage: NativeImage, options: AgentRunOptions): Promise<AgentResult> {
+  /**
+   * Process messages with OpenAI without requiring an image
+   */
+  private async runConversation(
+    agent: AgentConfig,
+    conversation: Conversation,
+    options: AgentRunOptions
+  ): Promise<AgentResult> {
     try {
-      const agent = this.configManager.getAgent(id)
-      if (!agent) {
-        throw new AgentError(`Agent not found: ${id}`, 'AGENT_NOT_FOUND')
-      }
-
-      if (!agent.enabled) {
-        throw new AgentError(`Agent is disabled: ${id}`, 'AGENT_DISABLED')
-      }
-
-      const openai = this.clientManager.getClient(agent.modelConfig.gene as AgentModelGene)
       const modelConfig = await mgrPreference.get<ModelConfig>(`aiModel.${agent.modelConfig.gene}`)
       
       if (!modelConfig?.modelName) {
         throw new ConfigError(`Model name not configured: ${agent.modelConfig.gene}`)
       }
 
-      if (!croppedImage) {
-        throw new AgentError('No image provided', 'NO_IMAGE_PROVIDED')
-      }
-
-      if (!image.meetsMinimumSize(croppedImage)) {
-        throw new AgentError('Image is too small', 'INVALID_IMAGE')
-      }
-
-      // Get or create conversation
-      let conversation = options.conversationId ? 
-        this.conversationManager.getConversation(options.conversationId) :
-        this.conversationManager.createConversation(id, agent, croppedImage)
-
-      // Add user messages from parameters
+      // Add user messages from parameters if provided
       if (options.parameters?.messages) {
         const userMessages = options.parameters.messages.map(m => ({
           role: m.role,
@@ -258,8 +311,12 @@ class AgentRunner {
         })
       }
 
-      // Save conversation state with user messages
-      this.conversationManager.updateConversation(conversation.id, conversation)
+      // Ensure conversation is in memory before proceeding
+      // This is important to prevent "Conversation not found" errors
+      if (!this.conversationManager.getConversation(conversation.id)) {
+        Logger.debug(`Ensuring conversation ${conversation.id} is in memory cache`)
+        this.conversationManager.addToMemory(conversation)
+      }
 
       // Format messages for OpenAI API - only send necessary data
       const formattedMessages = conversation.messages.map(msg => ({
@@ -276,13 +333,18 @@ class AgentRunner {
         }
       })
 
-      // Call OpenAI with conversation history
-      const response = await openai.chat.completions.create({
-        model: modelConfig.modelName,
-        messages: formattedMessages as any,
-        max_tokens: agent.parameters?.maxTokens || 4096,
-        temperature: agent.parameters?.temperature || 0,
-      })
+      // Call OpenAI with conversation history using executeWithRetry
+      const response = await this.clientManager.executeWithRetry(
+        agent.modelConfig.gene as AgentModelGene,
+        async (client) => {
+          return client.chat.completions.create({
+            model: modelConfig.modelName,
+            messages: formattedMessages as any,
+            max_tokens: agent.parameters?.maxTokens || 4096,
+            temperature: agent.parameters?.temperature || 0,
+          })
+        }
+      )
 
       // Add assistant response
       const assistantMessage: AgentMessage = {
@@ -302,35 +364,83 @@ class AgentRunner {
         }
       })
 
-      // Update conversation metadata
-      conversation.metadata.updatedAt = Date.now()
-      conversation.metadata.turnCount++
-      this.conversationManager.updateConversation(conversation.id, conversation)
+      // Update conversation metadata and save
+      const updatedConversation = this.conversationManager.updateConversation(conversation.id, {
+        messages: conversation.messages,
+        metadata: {
+          ...conversation.metadata,
+          updatedAt: Date.now(),
+          turnCount: conversation.metadata.turnCount + 1
+        }
+      })
 
       // Return only necessary data
       return {
         conversation: {
-          id: conversation.id,
-          agentId: conversation.agentId,
-          messages: conversation.messages.map(msg => ({
+          id: updatedConversation.id,
+          agentId: updatedConversation.agentId,
+          messages: updatedConversation.messages.map(msg => ({
             role: msg.role,
             content: msg.content,
             timestamp: msg.timestamp
           })),
           metadata: {
-            createdAt: conversation.metadata.createdAt,
-            updatedAt: conversation.metadata.updatedAt,
-            turnCount: conversation.metadata.turnCount
+            createdAt: updatedConversation.metadata.createdAt,
+            updatedAt: updatedConversation.metadata.updatedAt,
+            turnCount: updatedConversation.metadata.turnCount
           }
         },
         latestMessage: assistantMessage
       }
+    } catch (error) {
+      Logger.error('Failed to process messages:', error)
+      return {
+        conversation,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+  }
+
+  async runAgent(id: string, croppedImage: NativeImage | null, options: AgentRunOptions): Promise<AgentResult> {
+    try {
+      const agent = this.configManager.getAgent(id)
+      if (!agent) {
+        throw new AgentError(`Agent ${id} not found`, 'AGENT_NOT_FOUND')
+      }
+
+      if (!agent.enabled) {
+        throw new AgentError(`Agent ${id} is disabled`, 'AGENT_DISABLED')
+      }
+
+      let conversation: Conversation | undefined = undefined
+      
+      // If conversationId is provided, try to load the existing conversation
+      if (options.conversationId) {
+        conversation = await this.conversationManager.loadConversation(options.conversationId)
+      }
+
+      // Only require image for new conversations
+      if (!conversation) {
+        if (!croppedImage) {
+          throw new AgentError('No image provided for new conversation', 'NO_IMAGE_PROVIDED')
+        }
+
+        // Validate image size
+        if (!image.meetsMinimumSize(croppedImage)) {
+          throw new AgentError('Image is too small', 'INVALID_IMAGE')
+        }
+
+        conversation = this.conversationManager.createConversation(id, agent, croppedImage)
+      }
+
+      // Run the conversation with the agent
+      return this.runConversation(agent, conversation, options)
 
     } catch (error) {
       Logger.error('Failed to run agent:', error)
       return {
         conversation: options.conversationId ? 
-          this.conversationManager.getConversation(options.conversationId) :
+          await this.conversationManager.loadConversation(options.conversationId) :
           undefined,
         error: error instanceof Error ? error.message : String(error)
       }
@@ -372,7 +482,7 @@ export class AgentsManager {
     return this.configManager.deleteAgent(id)
   }
 
-  async runAgent(id: string, croppedImage: NativeImage, options: AgentRunOptions): Promise<AgentResult> {
+  async runAgent(id: string, croppedImage: NativeImage | null, options: AgentRunOptions): Promise<AgentResult> {
     return this.runner.runAgent(id, croppedImage, options)
   }
 }
