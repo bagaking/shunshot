@@ -422,6 +422,14 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
     lineWidth: drawing.lineWidth,
     setLineWidth: drawing.setLineWidth,
     mosaicSize: drawing.mosaicSize,
-    setMosaicSize: drawing.setMosaicSize
+    setMosaicSize: drawing.setMosaicSize,
+    
+    // 文本编辑相关
+    editingText: drawing.editingText,
+    textInputValue: drawing.textInputValue,
+    textInputRef: drawing.textInputRef,
+    handleTextInputChange: drawing.handleTextInputChange,
+    completeTextEditing: drawing.completeTextEditing,
+    cancelTextEditing: drawing.cancelTextEditing
   }
 } 

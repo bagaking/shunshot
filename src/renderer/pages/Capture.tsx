@@ -41,7 +41,14 @@ const Capture: React.FC = () => {
     lineWidth,
     setLineWidth,
     mosaicSize,
-    setMosaicSize
+    setMosaicSize,
+    // 文本编辑相关
+    editingText,
+    textInputValue,
+    textInputRef,
+    handleTextInputChange,
+    completeTextEditing,
+    cancelTextEditing
   } = useCapture({ displayInfo, onDisplayInfoChange: setDisplayInfo })
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -346,6 +353,56 @@ const Capture: React.FC = () => {
     }
   }, [activeTool])
 
+  // 渲染文本输入框
+  const renderTextInput = () => {
+    if (!editingText || !currentElement || currentElement.type !== ToolType.Text) {
+      return null
+    }
+
+    const position = currentElement.points[0]
+    if (!position) return null
+
+    // 计算输入框位置 - 修改为直接在点击位置显示
+    const inputStyle: React.CSSProperties = {
+      position: 'absolute',
+      left: `${position.x}px`,
+      top: `${position.y}px`, // 直接在点击位置显示，不再上移
+      minWidth: '100px',
+      background: 'transparent',
+      border: 'none',
+      outline: 'none',
+      color: currentElement.color || drawColor,
+      fontSize: `${currentElement.fontSize || 16}px`,
+      fontFamily: currentElement.fontFamily || 'Arial',
+      padding: '0',
+      margin: '0',
+      // 添加文本阴影以提高可读性
+      textShadow: '0px 0px 2px rgba(255, 255, 255, 0.8)'
+    }
+
+    return (
+      <div className="absolute inset-0 pointer-events-auto z-50">
+        <input
+          ref={textInputRef}
+          type="text"
+          value={textInputValue}
+          onChange={handleTextInputChange}
+          onBlur={completeTextEditing}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              completeTextEditing()
+            } else if (e.key === 'Escape') {
+              cancelTextEditing()
+            }
+          }}
+          style={inputStyle}
+          autoFocus
+          placeholder="输入文字..."
+        />
+      </div>
+    )
+  }
+
   return (
     <ErrorBoundary>
       <div className="fixed inset-0 select-none overflow-hidden w-screen h-screen bg-transparent">
@@ -416,10 +473,17 @@ const Capture: React.FC = () => {
                 onModeChange={handleModeChange}
                 onToolChange={handleToolChange}
                 activeTool={activeTool}
+                drawColor={drawColor}
+                onColorChange={setDrawColor}
+                lineWidth={lineWidth}
+                onLineWidthChange={setLineWidth}
               />
             </div>
           </>
         )}
+
+        {/* 文本输入框 */}
+        {renderTextInput()}
       </div>
     </ErrorBoundary>
   )

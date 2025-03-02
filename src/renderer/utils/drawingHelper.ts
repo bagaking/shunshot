@@ -156,8 +156,22 @@ export const drawingHelper = {
     ctx.fillStyle = element.color || '#FF0000'
     ctx.globalAlpha = element.opacity || 1
     
+    // 添加文本阴影以提高可读性
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.8)'
+    ctx.shadowBlur = 2 * scaleFactor
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 0
+    
     // Draw text
     if (element.text) {
+      // 先绘制白色轮廓增强可见度
+      ctx.strokeStyle = 'white'
+      ctx.lineWidth = 3 * scaleFactor
+      ctx.lineJoin = 'round'
+      ctx.miterLimit = 2
+      ctx.strokeText(element.text, position.x, position.y)
+      
+      // 再绘制文本内容
       ctx.fillText(element.text, position.x, position.y)
     } else {
       // If no text, draw a cursor placeholder

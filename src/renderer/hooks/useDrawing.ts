@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { DrawElementUnion, ToolType } from '../../types/capture'
+import { DrawElementUnion, ToolType, TextElement } from '../../types/capture'
 import { Point, Bounds, DisplayInfo } from '../../common/2d'
 import { v4 as uuidv4 } from 'uuid'
 import { translog } from '../utils/translog'
@@ -38,10 +38,15 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
   const [drawElements, setDrawElements] = useState<DrawElementUnion[]>([])
   const [isDrawing, setIsDrawing] = useState(false)
   const [currentElement, setCurrentElement] = useState<DrawElementUnion | null>(null)
-  const [drawColor, setDrawColor] = useState<string>('#2c5282') // 深蓝色，看起来更专业
+  const [drawColor, setDrawColor] = useState<string>('#e53e3e') // 更新为偏红色调，与工具栏保持一致
   const [lineWidth, setLineWidth] = useState<number>(2) // 更细的线条
   const [mosaicSize, setMosaicSize] = useState<number>(10) // Default mosaic size
   const [colorIndex, setColorIndex] = useState(0) // 当前颜色索引
+  
+  // 文本编辑状态
+  const [editingText, setEditingText] = useState<boolean>(false)
+  const [textInputValue, setTextInputValue] = useState<string>('')
+  const textInputRef = useRef<HTMLInputElement | null>(null)
 
   // 基础图形样式
   const baseShapeStyle = {
@@ -263,6 +268,18 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
   const updateCurrentElement = useCallback((point: Point) => {
     if (!currentElement || !isDrawing) return
 
+    // 如果是文本元素，不需要更新点，只需要移动位置
+    if (currentElement.type === ToolType.Text) {
+      setCurrentElement(prev => {
+        if (!prev) return null
+        return {
+          ...prev,
+          points: [point] // 文本元素只需要一个点表示位置
+        }
+      })
+      return
+    }
+
     setCurrentElement(prev => {
       if (!prev) return null
 
@@ -293,21 +310,103 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
   const finishDrawing = useCallback(() => {
     if (!currentElement) return
 
+    // 如果是文本元素，开始编辑文本
+    if (currentElement.type === ToolType.Text) {
+      setEditingText(true)
+      setTextInputValue('')
+      
+      // 在下一个渲染周期后聚焦文本输入框
+      setTimeout(() => {
+        if (textInputRef.current) {
+          textInputRef.current.focus()
+        }
+      }, 0)
+      
+      return
+    }
+
     setDrawElements(prev => [...prev, currentElement])
     setCurrentElement(null)
     setIsDrawing(false)
   }, [currentElement])
 
   /**
+   * Handle text input change
+   */
+  const handleTextInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setTextInputValue(e.target.value)
+    
+    // 同时更新当前元素的文本
+    if (currentElement && currentElement.type === ToolType.Text) {
+      setCurrentElement(prev => {
+        if (!prev || prev.type !== ToolType.Text) return prev
+        return {
+          ...prev,
+          text: e.target.value,
+          color: drawColor // 确保使用当前选择的颜色
+        } as TextElement
+      })
+    }
+  }, [currentElement, drawColor])
+
+  /**
+   * Complete text editing
+   */
+  const completeTextEditing = useCallback(() => {
+    if (!currentElement || currentElement.type !== ToolType.Text) return
+    
+    // 如果文本为空，不添加元素
+    if (!textInputValue.trim()) {
+      setCurrentElement(null)
+      setEditingText(false)
+      setIsDrawing(false)
+      return
+    }
+    
+    // 添加完成的文本元素
+    const finalTextElement: TextElement = {
+      ...currentElement,
+      text: textInputValue
+    }
+    
+    setDrawElements(prev => [...prev, finalTextElement])
+    setCurrentElement(null)
+    setEditingText(false)
+    setIsDrawing(false)
+    setTextInputValue('')
+    
+    // 保存带有文本的图像
+    if (selectedBounds) {
+      debouncedSaveAnnotatedImage()
+    }
+  }, [currentElement, textInputValue, selectedBounds, debouncedSaveAnnotatedImage])
+
+  /**
+   * Cancel text editing
+   */
+  const cancelTextEditing = useCallback(() => {
+    setCurrentElement(null)
+    setEditingText(false)
+    setIsDrawing(false)
+    setTextInputValue('')
+  }, [])
+
+  /**
    * Start drawing at a point
    */
   const startDrawing = useCallback((point: Point) => {
+    // 如果正在编辑文本，先完成文本编辑
+    if (editingText) {
+      completeTextEditing()
+      return
+    }
+    
     const newElement = createDrawElement(point)
     if (newElement) {
       setCurrentElement(newElement)
       setIsDrawing(true)
     }
-  }, [createDrawElement])
+  }, [createDrawElement, editingText, completeTextEditing])
 
   /**
    * Reset all drawing state
@@ -329,6 +428,11 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
     lineWidth,
     mosaicSize,
     
+    // Text editing state
+    editingText,
+    textInputValue,
+    textInputRef,
+    
     // Setters
     setDrawColor,
     setLineWidth,
@@ -340,6 +444,11 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
     updateCurrentElement,
     finishDrawing,
     resetDrawing,
-    saveAnnotatedImage
+    saveAnnotatedImage,
+    
+    // Text editing actions
+    handleTextInputChange,
+    completeTextEditing,
+    cancelTextEditing
   }
 } 
