@@ -33,7 +33,7 @@ const Capture: React.FC = () => {
     resetSelection,
     // 绘图相关
     activeTool,
-    handleToolChange,
+    handleToolChange: setActiveTool,
     drawElements,
     currentElement,
     drawColor,
@@ -42,6 +42,9 @@ const Capture: React.FC = () => {
     setLineWidth,
     mosaicSize,
     setMosaicSize,
+    // 笔触风格相关
+    penStyle,
+    setPenStyle,
     // 文本编辑相关
     editingText,
     textInputValue,
@@ -353,8 +356,21 @@ const Capture: React.FC = () => {
     }
   }, [activeTool])
 
+  // 处理工具变更
+  const handleToolChange = useCallback((tool: ToolType) => {
+    translog.debug('Tool changed', { tool })
+    setActiveTool(tool)
+    // 如果当前正在绘制，结束绘制
+    if (currentElement) {
+      if (editingText) {
+        completeTextEditing()
+      }
+    }
+  }, [setActiveTool, currentElement, editingText, completeTextEditing])
+
   // 渲染文本输入框
   const renderTextInput = () => {
+    // 确保只有在编辑文本状态且当前元素是文本类型时才渲染输入框
     if (!editingText || !currentElement || currentElement.type !== ToolType.Text) {
       return null
     }
@@ -362,44 +378,44 @@ const Capture: React.FC = () => {
     const position = currentElement.points[0]
     if (!position) return null
 
-    // 计算输入框位置 - 修改为直接在点击位置显示
+    // 计算输入框位置 - 确保与文本元素位置一致
+    const fontSize = currentElement.fontSize || 16
+    
+    // 获取当前的缩放比例
+    const scale = displayInfo ? displayInfo.scaleFactor / (window.devicePixelRatio || 1) : 1
+    
     const inputStyle: React.CSSProperties = {
-      position: 'absolute',
-      left: `${position.x}px`,
-      top: `${position.y}px`, // 直接在点击位置显示，不再上移
+      // position 属性由 className="fixed" 提供
+      left: `${position.x * scale}px`,
+      top: `${position.y * scale}px`,
       minWidth: '100px',
       background: 'transparent',
       border: 'none',
       outline: 'none',
       color: currentElement.color || drawColor,
-      fontSize: `${currentElement.fontSize || 16}px`,
+      fontSize: `${fontSize}px`,
       fontFamily: currentElement.fontFamily || 'Arial',
       padding: '0',
       margin: '0',
       // 添加文本阴影以提高可读性
       textShadow: '0px 0px 2px rgba(255, 255, 255, 0.8)'
+      // 移除 transform 属性
     }
 
     return (
-      <div className="absolute inset-0 pointer-events-auto z-50">
-        <input
-          ref={textInputRef}
-          type="text"
-          value={textInputValue}
-          onChange={handleTextInputChange}
-          onBlur={completeTextEditing}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              completeTextEditing()
-            } else if (e.key === 'Escape') {
-              cancelTextEditing()
-            }
-          }}
-          style={inputStyle}
-          autoFocus
-          placeholder="输入文字..."
-        />
-      </div>
+      <input
+        type="text"
+        className="fixed" // 使用 fixed 类，与 InfoPanel 一致
+        style={inputStyle}
+        value={textInputValue}
+        onChange={handleTextInputChange}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            completeTextEditing()
+          }
+        }}
+        autoFocus
+      />
     )
   }
 
@@ -477,6 +493,8 @@ const Capture: React.FC = () => {
                 onColorChange={setDrawColor}
                 lineWidth={lineWidth}
                 onLineWidthChange={setLineWidth}
+                penStyle={penStyle}
+                onPenStyleChange={setPenStyle}
               />
             </div>
           </>

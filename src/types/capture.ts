@@ -42,6 +42,19 @@ export interface PencilElement extends DrawElement {
   type: ToolType.Pencil;
   color?: string;
   lineWidth?: number;
+  penStyle?: PenStyle;
+  pressureSensitivity?: number;
+  taper?: boolean;
+  pressurePoints?: number[];
+}
+
+// 笔触风格枚举
+export enum PenStyle {
+  Normal = 'normal',     // 普通笔触
+  Brush = 'brush',       // 毛笔效果
+  Pencil = 'pencil',     // 铅笔效果
+  Marker = 'marker',     // 马克笔效果
+  Fountain = 'fountain'  // 钢笔效果
 }
 
 // 马赛克元素

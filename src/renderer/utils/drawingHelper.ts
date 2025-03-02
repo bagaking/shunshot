@@ -1,4 +1,4 @@
-import { DrawElementUnion, ToolType } from '../../types/capture'
+import { DrawElementUnion, ToolType, PenStyle } from '../../types/capture'
 import { Point, coordinates } from '../../common/2d'
 
 /**
@@ -44,22 +44,328 @@ export const drawingHelper = {
     const points = transformedElement.points
 
     ctx.save()
-    ctx.beginPath()
+    
+    // Set basic styles
     ctx.strokeStyle = element.color || '#FF0000'
-    ctx.lineWidth = (element.lineWidth || 3) * scaleFactor
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
-    
-    // Set opacity
     ctx.globalAlpha = element.opacity || 1
-
-    // Draw path
-    ctx.moveTo(points[0].x, points[0].y)
-    for (let i = 1; i < points.length; i++) {
-      ctx.lineTo(points[i].x, points[i].y)
+    
+    // Apply pen style specific settings
+    this.applyPenStyle(ctx, element, scaleFactor)
+    
+    // Use Catmull-Rom spline for smooth curve drawing
+    if (points.length >= 3) {
+      // For tapered strokes, we need to draw multiple paths with varying widths
+      const taper = element.taper !== undefined ? element.taper : true;
+      const pressureSensitivity = element.pressureSensitivity || 0.5;
+      
+      if (taper) {
+        // Draw the stroke with tapered ends
+        this.drawTaperedStroke(ctx, points, element, scaleFactor, pressureSensitivity);
+      } else {
+        // Start with the first point
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y)
+        
+        // For the first segment, use the first point as control point
+        this.drawCurveSegment(ctx, points[0], points[0], points[1], points[2], element)
+        
+        // Draw middle segments with Catmull-Rom spline
+        for (let i = 1; i < points.length - 2; i++) {
+          this.drawCurveSegment(ctx, points[i-1], points[i], points[i+1], points[i+2], element)
+        }
+        
+        // For the last segment, use the last point as control point
+        const lastIdx = points.length - 1
+        if (lastIdx >= 2) {
+          this.drawCurveSegment(ctx, points[lastIdx-2], points[lastIdx-1], points[lastIdx], points[lastIdx], element)
+        }
+        
+        ctx.stroke()
+      }
+    } else {
+      // Fallback to simple line for very short strokes
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y)
+      
+      // Apply pressure sensitivity if available
+      if (element.pressurePoints && element.pressurePoints[1]) {
+        const pressure = element.pressurePoints[1]
+        const baseWidth = (element.lineWidth || 3) * scaleFactor
+        ctx.lineWidth = baseWidth * (0.5 + pressure * 0.5) // Scale width based on pressure
+      }
+      
+      ctx.lineTo(points[1].x, points[1].y)
+      ctx.stroke()
     }
-    ctx.stroke()
+    
     ctx.restore()
+  },
+
+  /**
+   * Draw a tapered stroke with variable width based on pressure and position
+   */
+  drawTaperedStroke(
+    ctx: CanvasRenderingContext2D,
+    points: Point[],
+    element: DrawElementUnion,
+    scaleFactor: number,
+    pressureSensitivity: number
+  ) {
+    if (element.type !== ToolType.Pencil || points.length < 2) return
+    
+    const baseWidth = (element.lineWidth || 3) * scaleFactor;
+    const penStyle = element.penStyle || PenStyle.Normal;
+    const pressurePoints = element.pressurePoints || Array(points.length).fill(1);
+    
+    // Calculate the total length of the stroke
+    let totalLength = 0;
+    const segmentLengths: number[] = [];
+    const cumulativeLengths: number[] = [0];
+    
+    for (let i = 1; i < points.length; i++) {
+      const dx = points[i].x - points[i-1].x;
+      const dy = points[i].y - points[i-1].y;
+      const segmentLength = Math.sqrt(dx * dx + dy * dy);
+      segmentLengths.push(segmentLength);
+      totalLength += segmentLength;
+      cumulativeLengths.push(totalLength);
+    }
+    
+    // Draw the stroke with varying width
+    for (let i = 0; i < points.length - 1; i++) {
+      // Calculate normalized position along the stroke (0 at start, 1 at end)
+      const startPos = cumulativeLengths[i] / totalLength;
+      const endPos = cumulativeLengths[i + 1] / totalLength;
+      
+      // Calculate width based on position (tapered at ends) and pressure
+      const startPressure = pressurePoints[i] || 1;
+      const endPressure = pressurePoints[i + 1] || 1;
+      
+      // Taper factor: smaller near ends, full size in middle
+      const startTaper = this.calculateTaperFactor(startPos, penStyle);
+      const endTaper = this.calculateTaperFactor(endPos, penStyle);
+      
+      // Apply pressure sensitivity
+      const startWidth = baseWidth * (0.5 + startPressure * pressureSensitivity) * startTaper;
+      const endWidth = baseWidth * (0.5 + endPressure * pressureSensitivity) * endTaper;
+      
+      // Draw segment with varying width
+      this.drawVariableWidthSegment(
+        ctx, 
+        points[i], 
+        points[i + 1],
+        startWidth,
+        endWidth,
+        element.color || '#FF0000'
+      );
+    }
+  },
+  
+  /**
+   * Calculate taper factor based on position along the stroke
+   */
+  calculateTaperFactor(position: number, penStyle: PenStyle): number {
+    // Different pen styles have different taper profiles
+    switch (penStyle) {
+      case PenStyle.Brush:
+        // Brush has dramatic tapering at both ends
+        return Math.sin(position * Math.PI) * 0.8 + 0.2;
+        
+      case PenStyle.Fountain:
+        // Fountain pen has asymmetric tapering (thinner at start, fuller at end)
+        return 0.3 + 0.7 * (position < 0.5 
+          ? position * 2 
+          : 1);
+          
+      case PenStyle.Pencil:
+        // Pencil has subtle tapering
+        return 0.7 + 0.3 * Math.sin(position * Math.PI);
+        
+      case PenStyle.Marker:
+        // Marker has minimal tapering
+        return 0.9 + 0.1 * Math.sin(position * Math.PI);
+        
+      default:
+        // Normal pen has moderate tapering at both ends
+        return 0.5 + 0.5 * Math.sin(position * Math.PI);
+    }
+  },
+  
+  /**
+   * Draw a segment with variable width from start to end
+   */
+  drawVariableWidthSegment(
+    ctx: CanvasRenderingContext2D,
+    start: Point,
+    end: Point,
+    startWidth: number,
+    endWidth: number,
+    color: string
+  ) {
+    // Calculate the angle of the line
+    const angle = Math.atan2(end.y - start.y, end.x - start.x);
+    
+    // Calculate perpendicular angle
+    const perpAngle = angle + Math.PI / 2;
+    
+    // Calculate the corners of the segment
+    const startX1 = start.x + Math.cos(perpAngle) * startWidth / 2;
+    const startY1 = start.y + Math.sin(perpAngle) * startWidth / 2;
+    const startX2 = start.x - Math.cos(perpAngle) * startWidth / 2;
+    const startY2 = start.y - Math.sin(perpAngle) * startWidth / 2;
+    
+    const endX1 = end.x + Math.cos(perpAngle) * endWidth / 2;
+    const endY1 = end.y + Math.sin(perpAngle) * endWidth / 2;
+    const endX2 = end.x - Math.cos(perpAngle) * endWidth / 2;
+    const endY2 = end.y - Math.sin(perpAngle) * endWidth / 2;
+    
+    // Draw the segment as a filled shape
+    ctx.beginPath();
+    ctx.moveTo(startX1, startY1);
+    ctx.lineTo(endX1, endY1);
+    ctx.lineTo(endX2, endY2);
+    ctx.lineTo(startX2, startY2);
+    ctx.closePath();
+    
+    // Fill with the stroke color
+    ctx.fillStyle = color;
+    ctx.fill();
+  },
+
+  /**
+   * Apply pen style specific settings
+   */
+  applyPenStyle(
+    ctx: CanvasRenderingContext2D,
+    element: DrawElementUnion,
+    scaleFactor: number
+  ) {
+    if (element.type !== ToolType.Pencil) return
+    
+    const baseWidth = (element.lineWidth || 3) * scaleFactor
+    const penStyle = element.penStyle || PenStyle.Normal
+    
+    switch (penStyle) {
+      case PenStyle.Brush:
+        // Brush style: variable width, soft edges
+        ctx.lineWidth = baseWidth
+        ctx.shadowColor = element.color || '#FF0000'
+        ctx.shadowBlur = baseWidth / 2
+        // Add a subtle texture effect
+        ctx.globalCompositeOperation = 'source-over'
+        break
+        
+      case PenStyle.Pencil:
+        // Pencil style: grainy texture
+        ctx.lineWidth = baseWidth * 0.8
+        ctx.shadowColor = '#000000'
+        ctx.shadowBlur = 0.5
+        // Create a slightly transparent stroke for pencil effect
+        const color = element.color || '#FF0000'
+        ctx.strokeStyle = this.adjustColorAlpha(color, 0.9)
+        // Add a subtle texture
+        ctx.globalCompositeOperation = 'source-over'
+        break
+        
+      case PenStyle.Marker:
+        // Marker style: bold, slightly transparent
+        ctx.lineWidth = baseWidth * 1.2
+        const markerColor = element.color || '#FF0000'
+        ctx.strokeStyle = this.adjustColorAlpha(markerColor, 0.7)
+        // Markers blend colors
+        ctx.globalCompositeOperation = 'multiply'
+        break
+        
+      case PenStyle.Fountain:
+        // Fountain pen style: variable width based on direction
+        ctx.lineWidth = baseWidth
+        // Fountain pens have more character in their strokes
+        ctx.lineCap = 'square'
+        ctx.lineJoin = 'miter'
+        ctx.miterLimit = 2
+        // Add a subtle ink flow effect
+        ctx.shadowColor = this.adjustColorAlpha(element.color || '#FF0000', 0.3)
+        ctx.shadowBlur = baseWidth * 0.3
+        break
+        
+      default:
+        // Normal pen style
+        ctx.lineWidth = baseWidth
+        ctx.shadowColor = this.adjustColorAlpha(element.color || '#FF0000', 0.2)
+        ctx.shadowBlur = baseWidth * 0.1
+        break
+    }
+  },
+
+  /**
+   * Adjust color with alpha
+   */
+  adjustColorAlpha(color: string, alpha: number): string {
+    // Convert hex to rgba
+    if (color.startsWith('#')) {
+      const r = parseInt(color.slice(1, 3), 16)
+      const g = parseInt(color.slice(3, 5), 16)
+      const b = parseInt(color.slice(5, 7), 16)
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    }
+    // If already rgba, adjust alpha
+    if (color.startsWith('rgba')) {
+      return color.replace(/[\d\.]+\)$/, `${alpha})`)
+    }
+    // If rgb, convert to rgba
+    if (color.startsWith('rgb')) {
+      return color.replace('rgb', 'rgba').replace(')', `, ${alpha})`)
+    }
+    return color
+  },
+
+  /**
+   * Draw a Catmull-Rom curve segment for smooth path
+   * This creates a smooth curve through the points without requiring control points
+   */
+  drawCurveSegment(
+    ctx: CanvasRenderingContext2D,
+    p0: Point,
+    p1: Point,
+    p2: Point,
+    p3: Point,
+    element?: DrawElementUnion,
+    tension: number = 0.5
+  ) {
+    // Calculate Catmull-Rom control points (centripetal Catmull-Rom)
+    const t = tension;
+    
+    // Calculate control points
+    const d1 = Math.sqrt(Math.pow(p1.x - p0.x, 2) + Math.pow(p1.y - p0.y, 2));
+    const d2 = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+    const d3 = Math.sqrt(Math.pow(p3.x - p2.x, 2) + Math.pow(p3.y - p2.y, 2));
+    
+    // Compute tension vectors
+    const t1x = t * (p2.x - p0.x) / (d1 + d2);
+    const t1y = t * (p2.y - p0.y) / (d1 + d2);
+    const t2x = t * (p3.x - p1.x) / (d2 + d3);
+    const t2y = t * (p3.y - p1.y) / (d2 + d3);
+    
+    // Calculate control points for bezier curve
+    const c1x = p1.x + t1x;
+    const c1y = p1.y + t1y;
+    const c2x = p2.x - t2x;
+    const c2y = p2.y - t2y;
+    
+    // Apply pressure sensitivity if available
+    if (element?.type === ToolType.Pencil && element.pressureSensitivity && element.pressurePoints) {
+      const idx = element.points.findIndex(pt => pt.x === p1.x && pt.y === p1.y)
+      if (idx >= 0 && idx < element.pressurePoints.length) {
+        const pressure = element.pressurePoints[idx]
+        const baseWidth = (element.lineWidth || 3) * (ctx.canvas.width / 1000) // Scale based on canvas size
+        ctx.lineWidth = baseWidth * (0.5 + pressure * 0.5) // Scale width based on pressure
+      }
+    }
+    
+    // Draw the curve segment
+    ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p2.x, p2.y);
   },
 
   /**
@@ -150,17 +456,21 @@ export const drawingHelper = {
     // Transform point to device space
     const transformedElement = this.transformElementPoints(element, scaleFactor)
     const position = transformedElement.points[0]
+    const fontSize = (element.fontSize || 16) * scaleFactor
     
     ctx.save()
-    ctx.font = `${(element.fontSize || 16) * scaleFactor}px ${element.fontFamily || 'Arial'}`
+    ctx.font = `${fontSize}px ${element.fontFamily || 'Arial'}`
     ctx.fillStyle = element.color || '#FF0000'
     ctx.globalAlpha = element.opacity || 1
     
-    // 添加文本阴影以提高可读性
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.8)'
-    ctx.shadowBlur = 2 * scaleFactor
+    // 增强文本阴影以提高可读性
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.9)'
+    ctx.shadowBlur = 3 * scaleFactor
     ctx.shadowOffsetX = 0
     ctx.shadowOffsetY = 0
+    
+    // 计算文本基线位置，确保与输入框位置一致
+    const textY = position.y + (fontSize * 0.7);
     
     // Draw text
     if (element.text) {
@@ -169,13 +479,14 @@ export const drawingHelper = {
       ctx.lineWidth = 3 * scaleFactor
       ctx.lineJoin = 'round'
       ctx.miterLimit = 2
-      ctx.strokeText(element.text, position.x, position.y)
+      ctx.strokeText(element.text, position.x, textY)
       
       // 再绘制文本内容
-      ctx.fillText(element.text, position.x, position.y)
+      ctx.fillText(element.text, position.x, textY)
     } else {
       // If no text, draw a cursor placeholder
-      ctx.fillText('|', position.x, position.y)
+      const cursorChar = '|'
+      ctx.fillText(cursorChar, position.x, textY)
     }
     
     ctx.restore()

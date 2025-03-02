@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { DrawElementUnion, ToolType, TextElement } from '../../types/capture'
+import { DrawElementUnion, ToolType, TextElement, PenStyle } from '../../types/capture'
 import { Point, Bounds, DisplayInfo } from '../../common/2d'
 import { v4 as uuidv4 } from 'uuid'
 import { translog } from '../utils/translog'
@@ -42,6 +42,11 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
   const [lineWidth, setLineWidth] = useState<number>(2) // 更细的线条
   const [mosaicSize, setMosaicSize] = useState<number>(10) // Default mosaic size
   const [colorIndex, setColorIndex] = useState(0) // 当前颜色索引
+  
+  // 笔触风格设置
+  const [penStyle, setPenStyle] = useState<PenStyle>(PenStyle.Normal)
+  const [pressureSensitivity, setPressureSensitivity] = useState<number>(0.5) // 默认中等笔压敏感度
+  const [taper, setTaper] = useState<boolean>(true) // 默认启用笔触渐变
   
   // 文本编辑状态
   const [editingText, setEditingText] = useState<boolean>(false)
@@ -190,22 +195,6 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
   }, [drawElements, debouncedSaveAnnotatedImage, selectedBounds])
 
   /**
-   * Handle tool change
-   */
-  const handleToolChange = useCallback((tool: ToolType) => {
-    translog.debug('Tool changed', { tool })
-    setActiveTool(tool)
-    // If changing tools, end current drawing
-    if (isDrawing) {
-      setIsDrawing(false)
-      if (currentElement) {
-        setDrawElements(prev => [...prev, currentElement])
-        setCurrentElement(null)
-      }
-    }
-  }, [isDrawing, currentElement])
-
-  /**
    * Create a new drawing element
    */
   const createDrawElement = useCallback((point: Point): DrawElementUnion | null => {
@@ -225,7 +214,11 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
           ...baseElement,
           type: ToolType.Pencil,
           color: drawColor,
-          lineWidth
+          lineWidth,
+          penStyle,
+          pressureSensitivity,
+          taper,
+          pressurePoints: [1] // Initial pressure for the first point
         }
       case ToolType.Mosaic:
         return {
@@ -260,7 +253,7 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
       default:
         return null
     }
-  }, [activeTool, drawColor, lineWidth, mosaicSize, drawElements, getNextColorScheme])
+  }, [activeTool, drawColor, lineWidth, mosaicSize, drawElements, getNextColorScheme, penStyle, pressureSensitivity, taper])
 
   /**
    * Update the current drawing element
@@ -288,6 +281,27 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
         return {
           ...prev,
           points: [prev.points[0], point] // 保持起点不变，更新终点
+        }
+      }
+
+      // 对于铅笔工具，添加笔压模拟
+      if (prev.type === ToolType.Pencil) {
+        // 计算与上一点的距离，用于模拟笔压
+        const lastPoint = prev.points[prev.points.length - 1]
+        const dx = point.x - lastPoint.x
+        const dy = point.y - lastPoint.y
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        
+        // 根据距离和速度模拟笔压值 (0-1)
+        // 距离越大，速度越快，笔压越小
+        const speed = distance / 5 // 假设每帧移动5像素是正常速度
+        const pressureValue = Math.max(0.3, Math.min(1, 1 - (speed - 1) * 0.5))
+        
+        // 更新点和笔压值
+        return {
+          ...prev,
+          points: [...prev.points, point],
+          pressurePoints: [...(prev.pressurePoints || []), pressureValue]
         }
       }
 
@@ -401,12 +415,29 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
       return
     }
     
+    // 如果当前已有元素且是文本元素，先取消它
+    if (currentElement && currentElement.type === ToolType.Text) {
+      cancelTextEditing()
+      return
+    }
+    
+    // 如果当前工具是文本工具，确保没有其他文本元素正在编辑
+    if (activeTool === ToolType.Text) {
+      // 检查是否有任何文本元素正在编辑中
+      const textElements = drawElements.filter(el => el.type === ToolType.Text);
+      if (textElements.length > 0 && editingText) {
+        // 如果有正在编辑的文本元素，先完成编辑
+        completeTextEditing();
+        return;
+      }
+    }
+    
     const newElement = createDrawElement(point)
     if (newElement) {
       setCurrentElement(newElement)
       setIsDrawing(true)
     }
-  }, [createDrawElement, editingText, completeTextEditing])
+  }, [createDrawElement, editingText, completeTextEditing, cancelTextEditing, currentElement, activeTool, drawElements])
 
   /**
    * Reset all drawing state
@@ -416,6 +447,13 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
     setDrawElements([])
     setCurrentElement(null)
     setIsDrawing(false)
+  }, [])
+
+  // 设置笔触风格
+  const setPenStyleAndOptions = useCallback((style: PenStyle, sensitivity: number = 0.5, enableTaper: boolean = true) => {
+    setPenStyle(style)
+    setPressureSensitivity(sensitivity)
+    setTaper(enableTaper)
   }, [])
 
   return {
@@ -434,12 +472,12 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
     textInputRef,
     
     // Setters
+    setActiveTool,
     setDrawColor,
     setLineWidth,
     setMosaicSize,
     
     // Actions
-    handleToolChange,
     startDrawing,
     updateCurrentElement,
     finishDrawing,
@@ -449,6 +487,12 @@ export const useDrawing = (selectedBounds?: Bounds | null, displayInfo?: Display
     // Text editing actions
     handleTextInputChange,
     completeTextEditing,
-    cancelTextEditing
+    cancelTextEditing,
+    
+    // Pen style actions
+    penStyle,
+    setPenStyle: setPenStyleAndOptions,
+    pressureSensitivity,
+    taper
   }
 } 

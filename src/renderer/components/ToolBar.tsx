@@ -4,11 +4,12 @@ import { Bounds } from '../../common/2d'
 import { message as antdMessage } from 'antd' 
 import { usePanelManager } from '../panels/PanelManager' 
 import { translog } from '../utils/translog'
-import { Square, Circle, Pencil, Grid } from 'lucide-react'
-import { EditOutlined, FileSearchOutlined, VideoCameraOutlined, CameraOutlined, RobotOutlined, CloseOutlined, CheckOutlined, BgColorsOutlined } from '@ant-design/icons'
+import { Pencil, Grid, Type, ScanText, FileText } from 'lucide-react'
+import { EditOutlined, FileSearchOutlined, VideoCameraOutlined, CameraOutlined, RobotOutlined, CloseOutlined, CheckOutlined, FontSizeOutlined, BlockOutlined, ScanOutlined } from '@ant-design/icons'
 import { MessageService } from '../services/messageService'
-import { ToolType } from '../../types/capture'
-import { Tooltip } from 'antd'
+import { ToolType, PenStyle } from '../../types/capture'
+
+import { BrushSettings } from './BrushSettings'
 
 interface ToolBarProps {
   onConfirm: () => void
@@ -23,6 +24,8 @@ interface ToolBarProps {
   onColorChange?: (color: string) => void
   lineWidth?: number
   onLineWidthChange?: (width: number) => void
+  penStyle?: PenStyle
+  onPenStyleChange?: (style: PenStyle, sensitivity?: number, taper?: boolean) => void
 }
 
 interface ToolButton {
@@ -72,119 +75,6 @@ const AgentMenu: React.FC<{
   )
 }
 
-// 重新设计的颜色和画笔设置面板
-const BrushSettings: React.FC<{
-  onClose: () => void
-  onColorSelect: (color: string) => void
-  onLineWidthChange: (width: number) => void
-  currentColor: string
-  currentLineWidth: number
-}> = ({ onClose, onColorSelect, onLineWidthChange, currentColor, currentLineWidth }) => {
-  // 预定义的颜色选项
-  const colorOptions = [
-    // 红色系列
-    '#e53e3e', '#c53030', '#9b2c2c', '#ff6b6b', '#ff8787',
-    // 橙色系列
-    '#dd6b20', '#ed8936', '#f6ad55',
-    // 黄色系列
-    '#ecc94b', '#f6e05e', '#faf089',
-    // 绿色系列
-    '#38a169', '#48bb78', '#9ae6b4',
-    // 蓝色系列
-    '#3182ce', '#4299e1', '#63b3ed',
-    // 紫色系列
-    '#805ad5', '#9f7aea', '#d6bcfa',
-    // 粉色系列
-    '#d53f8c', '#ed64a6', '#fbb6ce',
-    // 黑白灰
-    '#000000', '#4a5568', '#718096', '#a0aec0', '#e2e8f0', '#ffffff'
-  ];
-
-  // 预定义的线宽选项
-  const lineWidthOptions = [1, 2, 3, 5, 8];
-
-  // 处理点击外部关闭
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (!(e.target as Element).closest('.brush-settings-container')) {
-        onClose();
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onClose]);
-
-  return (
-    <div 
-      className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl p-3 brush-settings-container z-50"
-      style={{ 
-        width: '240px',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
-      }}
-    >
-      {/* 颜色选择区域 */}
-      <div className="mb-3">
-        <div className="mb-2 text-sm font-medium text-gray-700 flex justify-between items-center">
-          <span>颜色</span>
-          <div 
-            className="w-6 h-6 rounded-full border border-gray-300" 
-            style={{ backgroundColor: currentColor }}
-          />
-        </div>
-        
-        <div className="grid grid-cols-6 gap-2">
-          {colorOptions.map((color) => (
-            <button
-              key={color}
-              onClick={() => onColorSelect(color)}
-              className={`w-7 h-7 rounded-full transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                currentColor === color ? 'ring-2 ring-offset-2 ring-blue-500 transform scale-110' : ''
-              }`}
-              style={{ 
-                backgroundColor: color,
-                boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
-                border: color === '#ffffff' ? '1px solid #e2e8f0' : 'none'
-              }}
-              aria-label={`选择颜色 ${color}`}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* 线宽选择区域 */}
-      <div>
-        <div className="mb-2 text-sm font-medium text-gray-700">
-          <span>笔触大小</span>
-        </div>
-        
-        <div className="flex justify-between items-center">
-          {lineWidthOptions.map((width) => (
-            <button
-              key={width}
-              onClick={() => onLineWidthChange(width)}
-              className={`flex flex-col items-center justify-center p-1 rounded-md transition-colors hover:bg-gray-100 ${
-                currentLineWidth === width ? 'bg-blue-50 ring-1 ring-blue-200' : ''
-              }`}
-            >
-              <div 
-                className="rounded-full bg-gray-800" 
-                style={{ 
-                  width: `${width * 3}px`, 
-                  height: `${width * 3}px`,
-                  backgroundColor: currentColor
-                }}
-              />
-              <span className="text-xs mt-1">{width}px</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export const ToolBar: React.FC<ToolBarProps> = ({
   onConfirm,
   onCancel,
@@ -197,7 +87,9 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   drawColor = '#e53e3e',
   onColorChange,
   lineWidth = 2,
-  onLineWidthChange
+  onLineWidthChange,
+  penStyle = PenStyle.Normal,
+  onPenStyleChange
 }) => {
   const [activeTooltip, setActiveTooltip] = useState<string>('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -344,6 +236,11 @@ export const ToolBar: React.FC<ToolBarProps> = ({
     if (onColorChange) {
       translog.debug('Color selected:', { color })
       onColorChange(color)
+      
+      // 当用户选择颜色时，自动选中画笔工具
+      if (activeTool !== ToolType.Pencil) {
+        handleToolSelect(ToolType.Pencil)
+      }
     }
   }
 
@@ -352,6 +249,24 @@ export const ToolBar: React.FC<ToolBarProps> = ({
     if (onLineWidthChange) {
       translog.debug('Line width changed:', { width })
       onLineWidthChange(width)
+      
+      // 当用户调整线宽时，自动选中画笔工具
+      if (activeTool !== ToolType.Pencil) {
+        handleToolSelect(ToolType.Pencil)
+      }
+    }
+  }
+
+  // 处理笔触风格变化
+  const handlePenStyleChange = (style: PenStyle, sensitivity?: number, taper?: boolean) => {
+    if (onPenStyleChange) {
+      translog.debug('Pen style changed:', { style, sensitivity, taper })
+      onPenStyleChange(style, sensitivity, taper)
+      
+      // 当用户调整笔触风格时，自动选中画笔工具
+      if (activeTool !== ToolType.Pencil) {
+        handleToolSelect(ToolType.Pencil)
+      }
     }
   }
 
@@ -393,7 +308,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
     },
     {
       tooltip: '识别内容',
-      icon: <FileSearchOutlined spin={isProcessing} />,
+      icon: <ScanOutlined spin={isProcessing} />,
       onClick: handleOCR,
       disabled: !selectedBounds || isProcessing
     },
@@ -425,11 +340,14 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       tooltip: '画笔',
       icon: (
         <div className="relative flex items-center justify-center">
-          <Pencil className="w-3.5 h-3.5" style={{ color: drawColor }} />
-          <div 
-            className="absolute -bottom-1 -right-1 w-2 h-2 rounded-full border border-white"
-            style={{ backgroundColor: drawColor }}
-          />
+          <Pencil className={`w-3.5 h-3.5 ${activeTool === ToolType.Pencil ? '' : 'text-gray-500'}`} 
+                 style={activeTool === ToolType.Pencil ? { color: drawColor } : {}} />
+          {activeTool === ToolType.Pencil && (
+            <div 
+              className="absolute -bottom-1 -right-1 w-2 h-2 rounded-full border border-white"
+              style={{ backgroundColor: drawColor }}
+            />
+          )}
         </div>
       ),
       toolType: ToolType.Pencil,
@@ -440,7 +358,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
     },
     {
       tooltip: '马赛克',
-      icon: <Grid className="w-3.5 h-3.5" />,
+      icon: <BlockOutlined className="text-lg" />,
       toolType: ToolType.Mosaic,
       isActive: activeTool === ToolType.Mosaic,
       onClick: () => handleToolSelect(ToolType.Mosaic),
@@ -448,7 +366,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
     },
     {
       tooltip: '文字',
-      icon: <EditOutlined />,
+      icon: <FontSizeOutlined className="text-lg" />,
       toolType: ToolType.Text,
       isActive: activeTool === ToolType.Text,
       onClick: () => handleToolSelect(ToolType.Text),
@@ -499,12 +417,12 @@ export const ToolBar: React.FC<ToolBarProps> = ({
               }}
             >
               <button
-                className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150 ${
+                className={`w-7 h-7 rounded-md flex items-center justify-center transition-all duration-200 ${
                   tool.disabled 
                     ? 'opacity-50 cursor-not-allowed'
                     : tool.isActive
-                      ? 'bg-blue-100 text-blue-600'
-                      : 'text-gray-500 hover:text-gray-900 active:text-blue-600'
+                      ? 'bg-blue-100 text-blue-600 shadow-sm transform scale-105'
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50 active:text-blue-600'
                 }`}
                 onClick={tool.onClick}
                 disabled={tool.disabled}
@@ -537,8 +455,10 @@ export const ToolBar: React.FC<ToolBarProps> = ({
               onClose={() => setShowBrushSettings(false)}
               onColorSelect={handleColorSelect}
               onLineWidthChange={handleLineWidthChange}
+              onPenStyleChange={handlePenStyleChange}
               currentColor={drawColor}
               currentLineWidth={lineWidth}
+              currentPenStyle={penStyle}
             />
           </div>
         )}

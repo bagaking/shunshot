@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { DisplayInfo, ToolType, DrawElementUnion } from '../../types/capture'
+import { DisplayInfo, ToolType, DrawElementUnion, PenStyle } from '../../types/capture'
 import { debugHelper } from '../utils/DebugHelper'
 import { translog } from '../utils/translog'
 import { Point, Rect, Bounds, coordinates } from '../../common/2d'
@@ -412,9 +412,9 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
     getBoundsFromRect,
     handleOCR,
     resetSelection,
-    // 绘图相关 - 从 drawing 中导出
+    // 绘图相关
     activeTool: drawing.activeTool,
-    handleToolChange: drawing.handleToolChange,
+    handleToolChange: drawing.setActiveTool,
     drawElements: drawing.drawElements,
     currentElement: drawing.currentElement,
     drawColor: drawing.drawColor,
@@ -423,7 +423,9 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
     setLineWidth: drawing.setLineWidth,
     mosaicSize: drawing.mosaicSize,
     setMosaicSize: drawing.setMosaicSize,
-    
+    // 笔触风格相关
+    penStyle: drawing.penStyle,
+    setPenStyle: drawing.setPenStyle,
     // 文本编辑相关
     editingText: drawing.editingText,
     textInputValue: drawing.textInputValue,
