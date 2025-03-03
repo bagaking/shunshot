@@ -65,23 +65,32 @@ export class TrayManager {
    */
   private loadTrayIcon(): Electron.NativeImage {
     try {
-      // 尝试加载自定义图标
-      const iconPath = join(process.env.VITE_PUBLIC || '', 'tray.png')
-      if (existsSync(iconPath)) {
-        const icon = nativeImage.createFromPath(iconPath)
-        if (!icon.isEmpty()) {
-          Logger.debug({
-            message: 'Custom icon loaded',
-            data: {
-              path: iconPath,
-              size: icon.getSize()
-            }
-          })
-          return icon
+      // 尝试从多个位置加载自定义图标
+      const iconPaths = [
+        join(process.env.VITE_PUBLIC || '', 'tray.png'),
+        join(app.getAppPath(), 'public', 'tray.png'),
+        join(process.env.DIST || '', 'public', 'tray.png')
+      ]
+      
+      for (const iconPath of iconPaths) {
+        if (existsSync(iconPath)) {
+          const icon = nativeImage.createFromPath(iconPath)
+          if (!icon.isEmpty()) {
+            Logger.debug({
+              message: 'Custom tray icon loaded',
+              data: {
+                path: iconPath,
+                size: icon.getSize()
+              }
+            })
+            return icon
+          }
         }
       }
+      
+      Logger.debug('No custom tray icon found, using default')
     } catch (error) {
-      Logger.error('Failed to load custom icon', error as Error)
+      Logger.error('Failed to load custom tray icon', error as Error)
     }
     
     // 使用默认图标

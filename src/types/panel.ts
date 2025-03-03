@@ -47,4 +47,6 @@ export interface AgentPanelManager {
   
   onPanelMessage(panelId: string, message: PanelMessage): void
   onBoundsChange(bounds: Bounds): void
-} 
+}
+
+export type PanelType = 'chat' | 'ocr'; 

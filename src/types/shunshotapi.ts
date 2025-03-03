@@ -9,6 +9,16 @@ export interface ConversationListItem {
   timestamp: number
 }
 
+// OCR处理模式枚举
+export enum OCRProcessMode {
+  Default = 'default',       // 普通识别
+  Formal = 'formal',         // 正式化
+  Simple = 'simple',         // 简化表达
+  Polish = 'polish',         // 润色完善
+  Bullets = 'bullets',       // 要点归纳
+  Expand = 'expand'          // 内容扩展
+}
+
 export interface IShunshotCoreAPI {
   // 截图相关
   captureScreen: () => Promise<void>
@@ -30,6 +40,14 @@ export interface IShunshotCoreAPI {
 
   // OCR相关
   requestOCR: (bounds: Bounds) => Promise<{ text?: string, error?: any }>
+  ocrWithOptions: (params: { 
+    bounds: Bounds, 
+    options?: { 
+      mode?: OCRProcessMode, 
+      customPrompt?: string 
+    },
+    existingText?: string
+  }) => Promise<{ text?: string, error?: any }>
 
   // 系统相关
   platform: string
@@ -52,6 +70,9 @@ export interface IShunshotCoreAPI {
   getConversations: () => Promise<ConversationListItem[]>
   getConversation: (id: string) => Promise<Conversation | null>
   updateConversation: (id: string, message: string, targetAgentId?: string) => Promise<Conversation>
+
+  // 错误日志相关
+  logError: (errorInfo: any) => Promise<void>
 } 
 
 declare global {

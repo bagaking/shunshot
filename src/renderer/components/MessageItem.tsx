@@ -26,7 +26,7 @@ const getMessageBubbleStyle = (type: AgentRole): string => {
 }
 
 export const MessageItem: React.FC<MessageItemProps> = React.memo(({ msg, agent, onCopy, onEdit }) => {
-  if (msg.role === 'system') {
+  if (msg.role === 'system' && !msg.content && !msg.error) {
     return null
   }
 

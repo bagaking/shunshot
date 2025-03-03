@@ -5,9 +5,11 @@ import {
   PanelConfig, 
   PanelState, 
   PanelMessage,
+  PanelType
 } from '../../types/panel'
 import { translog } from '../utils/translog'
 import { ChatPanel } from './ChatPanel'
+import { OCRPanel } from './OCRPanel'
 
 const defaultSize = { width: 800, height: 800 }
 
@@ -143,6 +145,12 @@ export const PanelManagerProvider: React.FC<PanelManagerProviderProps> = ({ chil
               translog.error('Chat panel missing required messages array', { panelId })
               return prev
             }
+          } else if (panel.type === 'ocr') {
+            // OCR面板验证
+            if (newContentProps.text === undefined && !newContentProps.loading && !newContentProps.error) {
+              translog.error('OCR panel missing required text content', { panelId })
+              return prev
+            }
           }
 
           const updatedPanel = {
@@ -249,6 +257,58 @@ export const PanelManagerProvider: React.FC<PanelManagerProviderProps> = ({ chil
           )
         } catch (error) {
           translog.error('Failed to render chat panel', {
+            panelId: panel.id,
+            error: error instanceof Error ? error.message : String(error)
+          })
+          return null
+        }
+      } else if (panel.type === 'ocr') {
+        try {
+          const {
+            text = '',
+            error,
+            loading = false,
+            onTextChange
+          } = panel.contentProps
+
+          // 确保 position 有效
+          const currentPosition = panel.position || { x: 0, y: 0 }
+
+          translog.debug('Rendering OCR panel', {
+            panelId: panel.id,
+            textLength: text?.length || 0,
+            hasError: !!error,
+            loading,
+            isMinimized: panel.isMinimized,
+            position: currentPosition
+          })
+
+          return (
+            <OCRPanel
+              key={panel.id}
+              id={panel.id}
+              position={currentPosition}
+              size={panel.size || defaultSize}
+              text={text}
+              error={error}
+              loading={loading}
+              onTextChange={onTextChange}
+              onMinimize={(id) => {
+                translog.debug('Panel minimize toggle', { 
+                  id, 
+                  currentState: panel.isMinimized 
+                })
+                manager.updatePanel(id, { isMinimized: !panel.isMinimized })
+              }}
+              onClose={(id) => {
+                translog.debug('Panel close requested', { id })
+                manager.removePanel(id)
+              }}
+              isMinimized={panel.isMinimized}
+            />
+          )
+        } catch (error) {
+          translog.error('Failed to render OCR panel', {
             panelId: panel.id,
             error: error instanceof Error ? error.message : String(error)
           })

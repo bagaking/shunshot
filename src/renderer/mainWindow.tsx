@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, StrictMode, Suspense, Component, ErrorInfo } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom'
 import ReactDOM from 'react-dom/client'
-import { ErrorBoundary } from './components/ErrorBoundary'
-import { debugHelper } from './utils/DebugHelper'
-import { translog } from './utils/translog'
 import { ProjectPanel } from './components/ProjectPanel'
+import { translog } from './utils/translog'
+import { debugHelper } from './utils/DebugHelper'
 import './index.css'
 
 translog.debug('Main window renderer starting...')
@@ -162,18 +161,146 @@ const MainWindow: React.FC = () => {
   )
 }
 
+// 错误边界组件
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null, errorInfo: ErrorInfo | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    this.setState({ errorInfo });
+    console.error('React Error Boundary caught an error:', error, errorInfo);
+    
+    // 将错误信息发送到主进程
+    if (window.shunshotCoreAPI && window.shunshotCoreAPI.logError) {
+      window.shunshotCoreAPI.logError({
+        title: 'React Error',
+        message: error.message,
+        stack: error.stack,
+        componentStack: errorInfo.componentStack,
+        timestamp: Date.now(),
+        url: window.location.href
+      });
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ 
+          padding: '20px', 
+          fontFamily: 'sans-serif', 
+          color: '#333',
+          backgroundColor: '#f8f9fa',
+          border: '1px solid #ddd',
+          borderRadius: '4px',
+          margin: '20px'
+        }}>
+          <h2 style={{ color: '#e53e3e' }}>应用出现错误</h2>
+          <p>{this.state.error?.message}</p>
+          {this.state.errorInfo && (
+            <details style={{ whiteSpace: 'pre-wrap', marginTop: '10px' }}>
+              <summary>查看详细信息</summary>
+              <p style={{ fontSize: '14px', color: '#666' }}>
+                {this.state.errorInfo.componentStack}
+              </p>
+            </details>
+          )}
+          <button 
+            onClick={() => window.location.reload()} 
+            style={{
+              marginTop: '15px',
+              padding: '8px 16px',
+              backgroundColor: '#3182ce',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            重新加载应用
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// 加载中组件
+const LoadingFallback = () => (
+  <div style={{ 
+    display: 'flex', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    height: '100vh',
+    flexDirection: 'column'
+  }}>
+    <div style={{ marginBottom: '20px' }}>加载中...</div>
+    <div style={{ width: '50px', height: '50px', border: '5px solid #f3f3f3', borderTop: '5px solid #3498db', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+    <style>{`
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `}</style>
+  </div>
+);
+
 // 初始化应用
-const root = document.getElementById('root')
-if (!root) {
-  translog.error('Root element not found')
-} else {
-  translog.debug('Root element found, mounting React app')
-  debugHelper.logEvent('Mounting MainWindow component')
-  ReactDOM.createRoot(root as HTMLElement).render(
-    <React.StrictMode>
+console.debug('[MainWindow] Initializing React application');
+
+try {
+  const rootElement = document.getElementById('root');
+  
+  if (!rootElement) {
+    throw new Error('Root element not found');
+  }
+  
+  const root = ReactDOM.createRoot(rootElement);
+  
+  root.render(
+    <StrictMode>
       <ErrorBoundary>
-        <MainWindow />
+        <Suspense fallback={<LoadingFallback />}>
+          <MainWindow />
+        </Suspense>
       </ErrorBoundary>
-    </React.StrictMode>
-  )
+    </StrictMode>
+  );
+  
+  console.debug('[MainWindow] React application initialized successfully');
+} catch (error) {
+  console.error('[MainWindow] Failed to initialize React application:', error);
+  
+  // 显示错误信息
+  const rootElement = document.getElementById('root');
+  if (rootElement) {
+    rootElement.innerHTML = `
+      <div style="padding: 20px; font-family: sans-serif; color: #333;">
+        <h2 style="color: #e53e3e;">初始化失败</h2>
+        <p>${error instanceof Error ? error.message : String(error)}</p>
+        <button onclick="window.location.reload()" style="margin-top: 15px; padding: 8px 16px; background-color: #3182ce; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          重新加载应用
+        </button>
+      </div>
+    `;
+  }
+  
+  // 将错误信息发送到主进程
+  if (window.shunshotCoreAPI && window.shunshotCoreAPI.logError) {
+    window.shunshotCoreAPI.logError({
+      title: 'Initialization Error',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: Date.now(),
+      url: window.location.href
+    });
+  }
 } 
