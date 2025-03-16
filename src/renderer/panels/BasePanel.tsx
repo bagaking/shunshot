@@ -2,11 +2,13 @@ import React from 'react'
 import { Position, Size } from '../../types/panel'
 import { motion, useDragControls } from 'framer-motion'
 import { MinusOutlined, BorderOutlined, CloseOutlined } from '@ant-design/icons'
+import { Bounds } from '../../common/2d'
 
 export interface BasePanelProps {
   id: string
   position: Position
   size: Size
+  bounds?: Bounds
   title?: string
   headerContent?: React.ReactNode
   isMinimized?: boolean

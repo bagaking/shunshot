@@ -3,7 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' blob:;" />
     <title>Shunshot</title>
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "./chunks/vendor-BSDvhzZr.js",
+        "react-dom": "./chunks/vendor-BSDvhzZr.js",
+        "@tanstack/react-query": "./chunks/vendor-BSDvhzZr.js",
+        "react-router-dom": "./chunks/vendor-BSDvhzZr.js"
+      }
+    }
+    </script>
     <style>
       body {
         margin: 0;
@@ -18,7 +29,8 @@
 
       /* 确保所有元素都能正确显示 */
       .select-none {
-        user-select: none;
+        -moz-user-select: none;
+             user-select: none;
         -webkit-user-select: none;
       }
 
@@ -28,12 +40,102 @@
       .pointer-events-auto {
         pointer-events: auto;
       }
+
+      /* 错误显示样式 */
+      #error-container {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.9);
+        z-index: 9999;
+        padding: 20px;
+        overflow: auto;
+        font-family: monospace;
+      }
+      #error-container.visible {
+        display: block;
+      }
+      .error-title {
+        color: #e53e3e;
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+      .error-message {
+        color: #2d3748;
+        margin-bottom: 10px;
+        white-space: pre-wrap;
+      }
+      .error-stack {
+        color: #4a5568;
+        font-size: 12px;
+        white-space: pre-wrap;
+        margin-bottom: 20px;
+      }
     </style>
     <script>
-      console.debug('[MainWindow] Document loading started',JSON.stringify({
-        timestamp: Date.now(),
-        url: window.location.href
-      }));
+      // 创建错误显示容器
+      document.addEventListener('DOMContentLoaded', () => {
+        const errorContainer = document.createElement('div');
+        errorContainer.id = 'error-container';
+        document.body.appendChild(errorContainer);
+        
+        console.debug('[MainWindow] Document loading started',JSON.stringify({
+          timestamp: Date.now(),
+          url: window.location.href
+        }));
+      });
+
+      // 全局错误处理
+      window.addEventListener('error', (event) => {
+        console.error('[MainWindow] Error occurred:',JSON.stringify({
+          error: event.error,
+          message: event.message,
+          timestamp: Date.now()
+        }));
+        
+        displayError('Uncaught Error', event.message, event.error?.stack);
+        event.preventDefault();
+      });
+
+      window.addEventListener('unhandledrejection', (event) => {
+        console.error('[MainWindow] Unhandled promise rejection:',JSON.stringify({
+          reason: event.reason,
+          timestamp: Date.now()
+        }));
+        
+        displayError('Unhandled Promise Rejection', 
+          event.reason?.message || 'Promise rejected', 
+          event.reason?.stack);
+        event.preventDefault();
+      });
+
+      // 显示错误信息
+      function displayError(title, message, stack) {
+        const errorContainer = document.getElementById('error-container');
+        if (!errorContainer) return;
+        
+        errorContainer.innerHTML = `
+          <div class="error-title">${title}</div>
+          <div class="error-message">${message}</div>
+          ${stack ? `<div class="error-stack">${stack}</div>` : ''}
+        `;
+        errorContainer.classList.add('visible');
+        
+        // 将错误信息发送到主进程
+        if (window.shunshotCoreAPI && window.shunshotCoreAPI.logError) {
+          window.shunshotCoreAPI.logError({
+            title,
+            message,
+            stack,
+            timestamp: Date.now(),
+            url: window.location.href
+          });
+        }
+      }
 
       // 监听 DOMContentLoaded 事件
       document.addEventListener('DOMContentLoaded', () => {
@@ -49,27 +151,53 @@
           timestamp: Date.now(),
           readyState: document.readyState
         }));
-      });
-
-      // 监听错误
-      window.addEventListener('error', (event) => {
-        console.error('[MainWindow] Error occurred:',JSON.stringify({
-          error: event.error,
-          message: event.message,
-          timestamp: Date.now()
-        }));
-      });
-
-      window.addEventListener('unhandledrejection', (event) => {
-        console.error('[MainWindow] Unhandled promise rejection:',JSON.stringify({
-          reason: event.reason,
-          timestamp: Date.now()
-        }));
+        
+        // 检查 React 是否成功初始化
+        setTimeout(() => {
+          const rootElement = document.getElementById('root');
+          if (rootElement && (!rootElement.children || rootElement.children.length === 0)) {
+            displayError('Rendering Error', 'React application failed to render. The root element is empty.', 
+              'This might be caused by a JavaScript error during initialization or a missing React component.');
+          }
+        }, 2000); // 给React 2秒钟时间来渲染
       });
     </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="./mainWindow.tsx"></script>
+    <!-- 使用动态脚本加载，适应不同环境 -->
+    <script>
+      // 动态加载主脚本
+      (function() {
+        // 确定当前环境
+        const isDev = window.location.href.includes('http://') || window.location.href.includes('https://');
+        
+        // 创建脚本元素
+        const script = document.createElement('script');
+        script.type = 'module';
+        
+        if (isDev) {
+          // 开发环境：使用绝对路径
+          script.src = '/src/renderer/mainWindow.tsx';
+        } else {
+          // 生产环境：使用相对路径
+          script.src = './mainWindowJs.js';
+        }
+        
+        // 添加到文档
+        document.body.appendChild(script);
+        
+        // 记录脚本加载
+        console.log(`Loading script from: ${script.src}`);
+        
+        // 监听脚本加载错误
+        script.onerror = function(error) {
+          console.error('Script loading error:', error);
+          displayError('Script Loading Error', 
+            `Failed to load script from ${script.src}`, 
+            'Please check the console for more details.');
+        };
+      })();
+    </script>
   </body>
 </html> 

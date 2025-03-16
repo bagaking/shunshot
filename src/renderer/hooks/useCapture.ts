@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DisplayInfo, ToolType, DrawElementUnion, PenStyle } from '../../types/capture'
 import { debugHelper } from '../utils/DebugHelper'
 import { translog } from '../utils/translog'
 import { Point, Rect, Bounds, coordinates } from '../../common/2d'
 import { useDrawing } from './useDrawing'
+import { OCRProcessMode } from '../../types/shunshotapi'
 
 interface UseCaptureProps {
   displayInfo: DisplayInfo | null
@@ -270,7 +271,13 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
   })
 
   // OCR 处理
-  const handleOCR = useCallback(async (displaySpaceBounds: Bounds): Promise<{text?: string, error?: any}> => {
+  const handleOCR = useCallback(async (
+    displaySpaceBounds: Bounds, 
+    options?: { 
+      mode?: OCRProcessMode, 
+      customPrompt?: string 
+    }
+  ): Promise<{text?: string, error?: any}> => {
     if (!displayInfo) {
       const error = 'No display info available'
       translog.error(error)
@@ -282,15 +289,39 @@ export const useCapture = ({ displayInfo, onDisplayInfoChange, onComplete }: Use
         displaySpace: {
           bounds: displaySpaceBounds,
           info: displayInfo
-        }
+        },
+        options
       })
 
-      return await window.shunshotCoreAPI.requestOCR(displaySpaceBounds)
+      let result;
+      
+      // 如果有指定OCR模式，使用高级API
+      if (options?.mode || options?.customPrompt) {
+        result = await window.shunshotCoreAPI.ocrWithOptions({
+          bounds: displaySpaceBounds,
+          options
+        });
+      } else {
+        // 默认OCR处理
+        result = await window.shunshotCoreAPI.requestOCR(displaySpaceBounds);
+      }
+      
+      // 添加调试日志
+      translog.debug('OCR result from main process', { result });
+      
+      // 确保返回格式正确
+      if (result.error) {
+        return { error: result.error };
+      } else if (result.text) {
+        return { text: result.text };
+      } else {
+        return { text: '未检测到文字' };
+      }
     } catch (error) {
-      translog.error('OCR request failed:', error)
-      return { error }
+      translog.error('OCR request failed:', error);
+      return { error };
     }
-  }, [displayInfo])
+  }, [displayInfo]);
 
   // 鼠标事件处理
   const handleMouseDown = useCallback((e: React.MouseEvent) => {

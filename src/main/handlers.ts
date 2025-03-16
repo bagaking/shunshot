@@ -1,9 +1,9 @@
-import { app, BrowserWindow, dialog, nativeImage, screen } from 'electron'
+import { app, BrowserWindow, dialog, screen, nativeImage } from 'electron'
 import { Logger } from './logger'
 import { mgrWindows } from './mgrWindows'
 import { mgrCapture } from './mgrCapture'
 import { mgrClipboard } from './mgrClipboard'
-import { mgrOCR } from './mgrOCR'
+import { mgrOCR, OCRProcessMode, OCROptions } from './mgrOCR'
 import { mgrPreference } from './mgrPreference'
 import { mgrShortcut } from './mgrShortcut'
 import { IShunshotCoreAPI } from '../types/shunshotapi'
@@ -11,6 +11,11 @@ import { Bounds, image } from '../common/2d'
 import { mgrAgents } from './mgrAgents'
 import { AgentResult, AgentRunOptions } from '../types/agents'
 import { mgrConversation } from './mgrConversation'
+import { desktopCapturer, ipcMain } from 'electron'
+import { join } from 'path'
+import { getSystemInfo, isWindows, isMac, isLinux } from './utils/osUtil'
+import { mgrWindow } from './mgrWindow'
+import { getSettings } from './settings'
 
 function MakeImage(bounds: Bounds): ReturnType<typeof nativeImage.createEmpty> | { error: string } {
   const currentData = mgrCapture.getCurrentData()
@@ -143,8 +148,6 @@ export const handlers: IShunshotCoreAPI = {
       throw error
     }
   },
-
-
 
   copyToClipboard: async (bounds: Bounds) => {
     Logger.log('Received COPY_TO_CLIPBOARD event')
@@ -340,6 +343,55 @@ export const handlers: IShunshotCoreAPI = {
       }
       // 调用 OCR
       return await mgrOCR.recognizeText(croppedImage)
+    } catch (error) {
+      Logger.error('Failed to process OCR', error as Error)
+      return { error: 'OCR processing failed' }
+    }
+  },
+  
+  // 使用不同模式的OCR识别
+  ocrWithOptions: async ({ bounds, options, existingText }: { 
+    bounds: Bounds, 
+    options?: { mode?: OCRProcessMode, customPrompt?: string },
+    existingText?: string 
+  }) => {
+    Logger.log('Received OCR request with options', { 
+      mode: options?.mode,
+      hasExistingText: !!existingText,
+      textLength: existingText?.length
+    });
+    
+    // 添加更详细的调试日志
+    Logger.debug({
+      message: 'OCR with options details',
+      data: {
+        bounds,
+        mode: options?.mode,
+        hasCustomPrompt: !!options?.customPrompt,
+        customPromptLength: options?.customPrompt?.length,
+        hasExistingText: !!existingText
+      }
+    });
+    
+    try {
+      const croppedImage = MakeImage(bounds) 
+      if (!croppedImage) {
+        Logger.error({message: 'Failed to make image', data: { error: 'Failed to make image' }})
+        return { error: 'Failed to make image' }
+      }
+      if ('error' in croppedImage) {
+        Logger.error({message: 'Failed to make image', data: { error: croppedImage.error }})
+        return { error: croppedImage.error }
+      }
+      
+      // 调用 OCR，传递选项
+      const ocrOptions: OCROptions = {
+        mode: options?.mode,
+        customPrompt: options?.customPrompt,
+        existingText: existingText // 添加已有文本到选项中
+      };
+      
+      return await mgrOCR.recognizeText(croppedImage, ocrOptions)
     } catch (error) {
       Logger.error('Failed to process OCR', error as Error)
       return { error: 'OCR processing failed' }

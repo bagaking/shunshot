@@ -6,16 +6,11 @@
   },
   "files": [
     "dist/**/*",
-    "package.json",
-    "node_modules/**/*"
+    "package.json"
   ],
-  "extraResources": [
-    {
-      "from": "node_modules",
-      "to": "app.asar.unpacked/node_modules",
-      "filter": ["**/*"]
-    }
-  ],
+  "asar": true,
+  "npmRebuild": false,
+  "buildDependenciesFromSource": false,
   "mac": {
     "target": ["dmg"],
     "category": "public.app-category.graphics-design",
@@ -23,6 +18,7 @@
     "gatekeeperAssess": false,
     "entitlements": "build/entitlements.mac.plist",
     "entitlementsInherit": "build/entitlements.mac.plist",
+    "icon": "build/icon.icns",
     "extendInfo": {
       "NSMicrophoneUsageDescription": "Please allow access to your microphone for screen recording.",
       "NSCameraUsageDescription": "Please allow access to your camera for screen recording.",
@@ -68,7 +64,8 @@
   },
   "linux": {
     "target": ["AppImage"],
-    "category": "Graphics"
+    "category": "Graphics",
+    "icon": "build/icon.png"
   },
   "protocols": {
     "name": "shunshot-protocol",

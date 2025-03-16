@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && electron-builder",
+    "debug-app": "ELECTRON_ENABLE_LOGGING=true ELECTRON_ENABLE_STACK_DUMPING=true DEBUG=electron-builder electron ./dist/main/index.js",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "test": "jest",

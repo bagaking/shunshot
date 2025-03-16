@@ -5,6 +5,10 @@ import { mgrWindows } from './mgrWindows'
 import { SHUNSHOT_BRIDGE_PREFIX } from '../types/shunshotBridge'
 import { CaptureData } from '../types/capture'
 import { Bounds, image } from '../common/2d'
+import { existsSync } from 'fs'
+
+// 导入调试函数的声明，不需要实现，因为它在mgrWindows.ts中已经实现
+declare function debugWindowLoading(windowName: string, paths: string[]): string[];
 
 export class CaptureImageData {
   public fullImage?: NativeImage;
@@ -371,20 +375,52 @@ export class CaptureManager {
    * 设置窗口加载
    */
   private async setupWindowLoading(win: BrowserWindow): Promise<void> {
-    const loadUrl = process.env.VITE_DEV_SERVER_URL
-      ? `${process.env.VITE_DEV_SERVER_URL}/src/renderer/captureWindow.html`
-      : `file://${join(process.env.DIST_RENDERER!, 'captureWindow.html')}`
+    // 使用更一致的路径处理方式
+    let loadUrl: string;
+    
+    if (process.env.VITE_DEV_SERVER_URL) {
+      // 开发环境：使用 Vite 开发服务器
+      loadUrl = `${process.env.VITE_DEV_SERVER_URL}/src/renderer/captureWindow.html`;
+    } else {
+      // 生产环境：加载编译后的 HTML 文件
+      const filePath = join(process.env.DIST_RENDERER!, 'captureWindow.html');
+      
+      // 检查文件是否存在
+      if (!existsSync(filePath)) {
+        // 尝试备用路径 - 检查多个可能的位置
+        const possiblePaths = [
+          join(process.env.DIST!, 'captureWindow.html'),
+          join(process.env.DIST!, 'src/renderer/captureWindow.html'),
+          join(process.env.DIST!, 'renderer/captureWindow.html')
+        ];
+        
+        // 使用调试函数记录路径信息，但不改变路径列表
+        debugWindowLoading('capture', possiblePaths);
+        
+        let found = false;
+        for (const path of possiblePaths) {
+          Logger.log(`Trying alternative path: ${path}`);
+          if (existsSync(path)) {
+            loadUrl = `file://${path}`;
+            found = true;
+            break;
+          }
+        }
+        
+        if (!found) {
+          throw new Error(`Capture window HTML file not found at any expected location`);
+        }
+      } else {
+        loadUrl = `file://${filePath}`;
+      }
+    }
 
     Logger.debug({
       message: 'Setting up window loading',
       data: {
         loadUrl,
         webContentsId: win.webContents.id,
-        isDestroyed: win.isDestroyed(),
-        env: {
-          VITE_DEV_SERVER_URL: process.env.VITE_DEV_SERVER_URL,
-          DIST_RENDERER: process.env.DIST_RENDERER
-        }
+        isDestroyed: win.isDestroyed()
       }
     })
 

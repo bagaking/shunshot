@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { AgentConfig, AgentMessage, ChatCompletionContentPart } from '../../types/agents'
+import { AgentConfig, AgentMessage, AgentRole } from '../../types/agents'
 import { Bounds } from '../../common/2d'
 import { message as antdMessage } from 'antd' 
 import { usePanelManager } from '../panels/PanelManager' 
 import { translog } from '../utils/translog'
-import { Pencil, Grid, Type, ScanText, FileText } from 'lucide-react'
-import { EditOutlined, FileSearchOutlined, VideoCameraOutlined, CameraOutlined, RobotOutlined, CloseOutlined, CheckOutlined, FontSizeOutlined, BlockOutlined, ScanOutlined } from '@ant-design/icons'
+import { Pencil } from 'lucide-react'
+import {  VideoCameraOutlined, CameraOutlined, RobotOutlined, CloseOutlined, CheckOutlined, FontSizeOutlined, BlockOutlined, ScanOutlined } from '@ant-design/icons'
 import { MessageService } from '../services/messageService'
 import { ToolType, PenStyle } from '../../types/capture'
 
@@ -107,14 +107,21 @@ export const ToolBar: React.FC<ToolBarProps> = ({
 
     setIsProcessing(true)
     
-    // Create OCR result panel immediately
+    // 获取屏幕中心位置，使面板更居中
+    // 使用相对于当前视口的位置，而不是固定坐标
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    
+    // 创建OCR面板，使用更合适的默认大小和位置
     const panelId = panelManager.createPanel({
-      type: 'chat',
+      type: 'ocr',
       bounds: selectedBounds,
-      position: { x: 100, y: 100 },
+      position: { 
+        x: Math.max(viewportWidth * 0.5 - 250, 50), 
+        y: Math.max(viewportHeight * 0.3, 50) 
+      },
+      size: { width: 500, height: 500 }, // 更适合OCR内容的尺寸
       contentProps: {
-        title: 'OCR 识别结果',
-        messages: [],
         loading: true
       }
     })
@@ -124,35 +131,56 @@ export const ToolBar: React.FC<ToolBarProps> = ({
     try {
       translog.debug('Starting OCR process', { bounds: selectedBounds })
       const result = await onOCR()
-      const messages: AgentMessage[] = []
       
+      // 添加详细的调试日志
+      translog.debug('OCR result received', { 
+        result,
+        hasResult: !!result,
+        hasError: !!result?.error,
+        hasText: !!result?.text,
+        textLength: result?.text?.length,
+        textPreview: result?.text?.substring(0, 50)
+      })
+      
+      // Update panel with results
       if (result.error) {
-        messages.push({
-          role: 'system',
-          content: '识别文字',
-          timestamp: Date.now(),
-          error: result.error
+        panelManager.updatePanel(panelId, {
+          contentProps: {
+            error: result.error,
+            loading: false,
+            bounds: selectedBounds
+          }
         })
         translog.error('OCR error:', result.error)
       } else {
-        messages.push({
-          role: 'system',
-          content: result.text || '',
-          timestamp: Date.now()
+        panelManager.updatePanel(panelId, {
+          contentProps: {
+            text: result.text || '未检测到文字',
+            loading: false,
+            bounds: selectedBounds,
+            onTextChange: (newText: string) => {
+              translog.debug('OCR text edited by user', { 
+                panelId, 
+                originalLength: result.text?.length || 0,
+                newLength: newText.length 
+              })
+              // 这里可以添加对编辑后文本的处理逻辑
+            }
+          }
         })
-        translog.debug('OCR success:', { text: result.text })
-      }
-
-      // Update panel with results
-      panelManager.updatePanel(panelId, {
-        contentProps: {
-          title: 'OCR 识别结果',
-          messages,
-          loading: false
+        
+        if (result.text) {
+          translog.debug('OCR success:', { 
+            textLength: result.text.length,
+            textPreview: result.text.substring(0, 50)
+          })
+        } else {
+          translog.debug('OCR returned no text')
         }
-      })
+      }
       
       translog.debug('OCR panel updated with results')
+      
     } catch (err) {
       translog.error('OCR process failed:', err)
       antdMessage.error('识别失败，请重试')

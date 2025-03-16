@@ -3,6 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <title>设置 - Shunshot</title>
+  <!-- 添加导入映射 -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "./chunks/vendor-BSDvhzZr.js",
+      "react-dom": "./chunks/vendor-BSDvhzZr.js",
+      "@tanstack/react-query": "./chunks/vendor-BSDvhzZr.js",
+      "react-router-dom": "./chunks/vendor-BSDvhzZr.js"
+    }
+  }
+  </script>
   <script>
     console.debug('[SettingWindow] Document loading started',JSON.stringify({
         timestamp: Date.now(),
@@ -41,6 +52,39 @@
 </head>
 <body>
   <div id="root"></div>
-  <script type="module" src="/src/renderer/settingsWindow.tsx"></script>
+  <!-- 使用动态脚本加载，适应不同环境 -->
+  <script>
+    // 动态加载主脚本
+    (function() {
+      // 确定当前环境
+      const isDev = window.location.href.includes('http://') || window.location.href.includes('https://');
+      
+      // 创建脚本元素
+      const script = document.createElement('script');
+      script.type = 'module';
+      
+      if (isDev) {
+        // 开发环境：使用绝对路径
+        script.src = '/src/renderer/settingsWindow.tsx';
+      } else {
+        // 生产环境：使用相对路径
+        script.src = './settingsWindowJs.js';
+      }
+      
+      // 添加到文档
+      document.body.appendChild(script);
+      
+      // 记录脚本加载
+      console.log(`Loading script from: ${script.src}`);
+      
+      // 监听脚本加载错误
+      script.onerror = function(error) {
+        console.error('Script loading error:', error);
+        displayError('Script Loading Error', 
+          `Failed to load script from ${script.src}`, 
+          'Please check the console for more details.');
+      };
+    })();
+  </script>
 </body>
 </html> 
